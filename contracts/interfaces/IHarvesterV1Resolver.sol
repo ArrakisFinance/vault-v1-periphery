@@ -2,11 +2,11 @@
 
 pragma solidity 0.8.4;
 
-import {IGUniPool} from "./IGUniPool.sol";
+import {IHarvesterV1} from "./IHarvesterV1.sol";
 
-interface IGUniResolver {
+interface IHarvesterV1Resolver {
     function getRebalanceParams(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         uint256 price18Decimals

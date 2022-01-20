@@ -9,7 +9,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
     hre.network.name === "polygon"
   ) {
     console.log(
-      `!! Deploying GUniResolver to ${hre.network.name}. Hit ctrl + c to abort`
+      `!! Deploying HarvesterV1Resolver to ${hre.network.name}. Hit ctrl + c to abort`
     );
     await new Promise((r) => setTimeout(r, 20000));
   }
@@ -17,7 +17,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const { deploy } = deployments;
   const { deployer } = await getNamedAccounts();
 
-  await deploy("GUniResolver", {
+  await deploy("HarvesterV1Resolver", {
     from: deployer,
   });
 };
@@ -31,6 +31,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment) => {
   return shouldSkip ? true : false;
 };
 
-func.tags = ["GUniResolver"];
+func.tags = ["HarvesterV1Resolver"];
 
 export default func;

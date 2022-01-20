@@ -10,7 +10,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
     hre.network.name === "polygon"
   ) {
     console.log(
-      `!! Deploying GUniRouter to ${hre.network.name}. Hit ctrl + c to abort`
+      `!! Deploying HarvesterV1Router to ${hre.network.name}. Hit ctrl + c to abort`
     );
     await new Promise((r) => setTimeout(r, 20000));
   }
@@ -19,11 +19,11 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const { deployer } = await getNamedAccounts();
   const addresses = getAddresses(hre.network.name);
 
-  await deploy("GUniRouter", {
+  await deploy("HarvesterV1Router", {
     from: deployer,
     proxy: {
       proxyContract: "EIP173ProxyWithReceive",
-      owner: addresses.GelatoDevMultiSig,
+      owner: addresses.ArrakisDevMultiSig,
       execute: {
         init: {
           methodName: "initialize",
@@ -44,6 +44,6 @@ func.skip = async (hre: HardhatRuntimeEnvironment) => {
   return shouldSkip ? true : false;
 };
 
-func.tags = ["GUniRouter"];
+func.tags = ["HarvesterV1Router"];
 
 export default func;

@@ -2,11 +2,11 @@
 
 pragma solidity 0.8.4;
 
-import {IGUniPool} from "./IGUniPool.sol";
+import {IHarvesterV1} from "./IHarvesterV1.sol";
 
-interface IGUniRouter {
+interface IHarvesterV1Router {
     function addLiquidity(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
@@ -21,7 +21,7 @@ interface IGUniRouter {
         );
 
     function addLiquidityETH(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
@@ -37,7 +37,7 @@ interface IGUniRouter {
         );
 
     function rebalanceAndAddLiquidity(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -55,7 +55,7 @@ interface IGUniRouter {
         );
 
     function rebalanceAndAddLiquidityETH(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -74,7 +74,7 @@ interface IGUniRouter {
         );
 
     function removeLiquidity(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,
@@ -88,7 +88,7 @@ interface IGUniRouter {
         );
 
     function removeLiquidityETH(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,

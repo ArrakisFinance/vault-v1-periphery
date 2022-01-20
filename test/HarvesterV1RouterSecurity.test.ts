@@ -3,17 +3,17 @@ import { expect } from "chai";
 import { deployments, ethers, network } from "hardhat";
 import { Addresses, getAddresses } from "../src/addresses";
 import { EIP173ProxyWithReceive } from "../typechain/EIP173ProxyWithReceive";
-import { GUniRouter } from "../typechain/GUniRouter";
-import { IGUniPool } from "../typechain/IGUniPool";
+import { HarvesterV1Router } from "../typechain/HarvesterV1Router";
+import { IHarvesterV1 } from "../typechain/IHarvesterV1";
 
 let addresses: Addresses;
 let wallet: SignerWithAddress;
 let walletAddress: string;
 
-describe("G-UNI Router: Security Tests", function () {
+describe("HarvesterV1 Router: Security Tests", function () {
   this.timeout(0);
-  let gUniPool: IGUniPool;
-  let gUniRouter: GUniRouter;
+  let harvesterV1: IHarvesterV1;
+  let harvesterV1Router: HarvesterV1Router;
   let proxy: EIP173ProxyWithReceive;
   before(async function () {
     await deployments.fixture();
@@ -23,26 +23,32 @@ describe("G-UNI Router: Security Tests", function () {
     walletAddress = await wallet.getAddress();
 
     const gUniFactory = await ethers.getContractAt(
-      ["function getGelatoPools() external view returns(address[] memory)"],
-      addresses.GUniFactory
+      [
+        "function getDeployers() external view returns(address[] memory)",
+        "function getPools(address) external view returns(address[] memory)",
+      ],
+      addresses.HarvesterV1Factory
     );
-    const pools = await gUniFactory.getGelatoPools();
+    const deployers = await gUniFactory.getDeployers();
+    const pools = await gUniFactory.getPools(deployers[0]);
     const poolAddress = pools[0];
-    gUniPool = (await ethers.getContractAt(
-      "IGUniPool",
+    harvesterV1 = (await ethers.getContractAt(
+      "IHarvesterV1",
       poolAddress
-    )) as IGUniPool;
+    )) as IHarvesterV1;
 
-    const gUniRouterAddress = (await deployments.get("GUniRouter")).address;
+    const harvesterV1RouterAddress = (
+      await deployments.get("HarvesterV1Router")
+    ).address;
 
-    gUniRouter = (await ethers.getContractAt(
-      "GUniRouter",
-      gUniRouterAddress
-    )) as GUniRouter;
+    harvesterV1Router = (await ethers.getContractAt(
+      "HarvesterV1Router",
+      harvesterV1RouterAddress
+    )) as HarvesterV1Router;
 
     proxy = (await ethers.getContractAt(
       "EIP173ProxyWithReceive",
-      gUniRouterAddress
+      harvesterV1RouterAddress
     )) as EIP173ProxyWithReceive;
 
     await network.provider.send("hardhat_setBalance", [
@@ -60,12 +66,19 @@ describe("G-UNI Router: Security Tests", function () {
     it("Pause, Revocation, Ownership, Upgradeability", async function () {
       const proxyOwner = await proxy.proxyAdmin();
 
-      await gUniRouter.pause();
+      await harvesterV1Router.pause();
       await expect(
-        gUniRouter.addLiquidity(gUniPool.address, 0, 0, 0, 0, walletAddress)
+        harvesterV1Router.addLiquidity(
+          harvesterV1.address,
+          0,
+          0,
+          0,
+          0,
+          walletAddress
+        )
       ).to.be.revertedWith("Pausable: paused");
-      await gUniRouter.transferOwnership(proxyOwner);
-      const owner = await gUniRouter.owner();
+      await harvesterV1Router.transferOwnership(proxyOwner);
+      const owner = await harvesterV1Router.owner();
       expect(owner).to.be.eq(proxyOwner);
       await network.provider.request({
         method: "hardhat_impersonateAccount",

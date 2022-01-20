@@ -2,8 +2,8 @@
 
 pragma solidity 0.8.4;
 
-import {IGUniResolver} from "./interfaces/IGUniResolver.sol";
-import {IGUniPool} from "./interfaces/IGUniPool.sol";
+import {IHarvesterV1Resolver} from "./interfaces/IHarvesterV1Resolver.sol";
+import {IHarvesterV1} from "./interfaces/IHarvesterV1.sol";
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
 import {
     IERC20Metadata
@@ -14,12 +14,12 @@ import {
 } from "./vendor/uniswap/LiquidityAmounts.sol";
 import {TickMath} from "./vendor/uniswap/TickMath.sol";
 
-contract GUniResolver is IGUniResolver {
+contract HarvesterV1Resolver is IHarvesterV1Resolver {
     using TickMath for int24;
 
     // solhint-disable-next-line function-max-lines
     function getRebalanceParams(
-        IGUniPool pool,
+        IHarvesterV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         uint256 price18Decimals
@@ -71,7 +71,7 @@ contract GUniResolver is IGUniResolver {
         }
     }
 
-    function _getUnderlyingOrLiquidity(IGUniPool pool)
+    function _getUnderlyingOrLiquidity(IHarvesterV1 pool)
         internal
         view
         returns (uint256 gross0, uint256 gross1)

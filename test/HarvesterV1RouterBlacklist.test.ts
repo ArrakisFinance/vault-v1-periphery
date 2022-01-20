@@ -2,10 +2,10 @@ import { expect } from "chai";
 import { deployments, ethers, network } from "hardhat";
 import {
   IERC20,
-  GUniRouterBlacklist,
-  IGUniPool,
+  HarvesterV1RouterBlacklist,
+  IHarvesterV1,
   IUniswapV3Pool,
-  GUniResolver,
+  HarvesterV1Resolver,
 } from "../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import { Addresses, getAddresses } from "../src/addresses";
@@ -15,16 +15,16 @@ let addresses: Addresses;
 const X96 = ethers.BigNumber.from("2").pow("96");
 const WAD = ethers.BigNumber.from("10").pow("18");
 
-describe("G-UNI Router (with Blacklist) tests", function () {
+describe("HarvesterV1 Router (with Blacklist) tests", function () {
   this.timeout(0);
   let wallet: SignerWithAddress;
   let token0: IERC20;
   let token1: IERC20;
-  let gUniToken: IERC20;
-  let gUniPool: IGUniPool;
-  let gUniRouter: GUniRouterBlacklist;
+  let rakisToken: IERC20;
+  let harvesterV1: IHarvesterV1;
+  let harvesterV1Router: HarvesterV1RouterBlacklist;
   let pool: IUniswapV3Pool;
-  let resolver: GUniResolver;
+  let resolver: HarvesterV1Resolver;
   let decimals0: number;
   let decimals1: number;
   before(async function () {
@@ -40,44 +40,50 @@ describe("G-UNI Router (with Blacklist) tests", function () {
       "0x313030303030303030303030303030303030303030",
     ]);
     const gUniFactory = await ethers.getContractAt(
-      ["function getGelatoPools() external view returns(address[] memory)"],
-      addresses.GUniFactory
+      [
+        "function getDeployers() external view returns(address[] memory)",
+        "function getPools(address) external view returns(address[] memory)",
+      ],
+      addresses.HarvesterV1Factory
     );
-    const pools = await gUniFactory.getGelatoPools();
+    const deployers = await gUniFactory.getDeployers();
+    const pools = await gUniFactory.getPools(deployers[0]);
     const poolAddress = pools[0];
-    gUniPool = (await ethers.getContractAt(
-      "IGUniPool",
+    harvesterV1 = (await ethers.getContractAt(
+      "IHarvesterV1",
       poolAddress
-    )) as IGUniPool;
+    )) as IHarvesterV1;
     token0 = (await ethers.getContractAt(
       "IERC20",
-      await gUniPool.token0()
+      await harvesterV1.token0()
     )) as IERC20;
     token1 = (await ethers.getContractAt(
       "IERC20",
-      await gUniPool.token1()
+      await harvesterV1.token1()
     )) as IERC20;
-    gUniToken = (await ethers.getContractAt("IERC20", poolAddress)) as IERC20;
+    rakisToken = (await ethers.getContractAt("IERC20", poolAddress)) as IERC20;
 
     pool = (await ethers.getContractAt(
       "IUniswapV3Pool",
-      await gUniPool.pool()
+      await harvesterV1.pool()
     )) as IUniswapV3Pool;
 
-    const gUniRouterAddress = (await deployments.get("GUniRouterBlacklist"))
+    const harvesterV1RouterAddress = (
+      await deployments.get("HarvesterV1RouterBlacklist")
+    ).address;
+
+    harvesterV1Router = (await ethers.getContractAt(
+      "HarvesterV1RouterBlacklist",
+      harvesterV1RouterAddress
+    )) as HarvesterV1RouterBlacklist;
+
+    const resolverAddress = (await deployments.get("HarvesterV1Resolver"))
       .address;
 
-    gUniRouter = (await ethers.getContractAt(
-      "GUniRouterBlacklist",
-      gUniRouterAddress
-    )) as GUniRouterBlacklist;
-
-    const resolverAddress = (await deployments.get("GUniResolver")).address;
-
     resolver = (await ethers.getContractAt(
-      "GUniResolver",
+      "HarvesterV1Resolver",
       resolverAddress
-    )) as GUniResolver;
+    )) as HarvesterV1Resolver;
 
     await network.provider.request({
       method: "hardhat_impersonateAccount",
@@ -109,25 +115,25 @@ describe("G-UNI Router (with Blacklist) tests", function () {
     );
   });
 
-  describe("deposits through GUniRouter", function () {
+  describe("deposits through HarvesterV1Router", function () {
     it("should deposit funds with addLiquidity", async function () {
       await token0
         .connect(wallet)
-        .approve(gUniRouter.address, ethers.utils.parseEther("1000000"));
+        .approve(harvesterV1Router.address, ethers.utils.parseEther("1000000"));
       await token1
         .connect(wallet)
-        .approve(gUniRouter.address, ethers.utils.parseEther("100000"));
+        .approve(harvesterV1Router.address, ethers.utils.parseEther("100000"));
       const balance0Before = await token0.balanceOf(await wallet.getAddress());
       const balance1Before = await token1.balanceOf(await wallet.getAddress());
-      const balanceGUniBefore = await gUniToken.balanceOf(
+      const balanceHarvesterV1Before = await rakisToken.balanceOf(
         await wallet.getAddress()
       );
 
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
 
-      await gUniRouter.addLiquidity(
-        gUniPool.address,
+      await harvesterV1Router.addLiquidity(
+        harvesterV1.address,
         input0,
         input1,
         0,
@@ -136,17 +142,23 @@ describe("G-UNI Router (with Blacklist) tests", function () {
       );
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
-      const balanceGUniAfter = await gUniToken.balanceOf(
+      const balanceHarvesterV1After = await rakisToken.balanceOf(
         await wallet.getAddress()
       );
 
       expect(balance0Before).to.be.gt(balance0After);
       expect(balance1Before).to.be.gt(balance1After);
-      expect(balanceGUniBefore).to.be.lt(balanceGUniAfter);
+      expect(balanceHarvesterV1Before).to.be.lt(balanceHarvesterV1After);
 
-      const contractBalance0 = await token0.balanceOf(gUniRouter.address);
-      const contractBalance1 = await token1.balanceOf(gUniRouter.address);
-      const contractBalanceG = await gUniToken.balanceOf(gUniRouter.address);
+      const contractBalance0 = await token0.balanceOf(
+        harvesterV1Router.address
+      );
+      const contractBalance1 = await token1.balanceOf(
+        harvesterV1Router.address
+      );
+      const contractBalanceG = await rakisToken.balanceOf(
+        harvesterV1Router.address
+      );
 
       expect(contractBalance0).to.equal(ethers.constants.Zero);
       expect(contractBalance1).to.equal(ethers.constants.Zero);
@@ -156,13 +168,13 @@ describe("G-UNI Router (with Blacklist) tests", function () {
     it("should deposit funds with rebalanceAndAddLiquidity", async function () {
       await token0
         .connect(wallet)
-        .approve(gUniRouter.address, ethers.utils.parseEther("1000000"));
+        .approve(harvesterV1Router.address, ethers.utils.parseEther("1000000"));
       await token1
         .connect(wallet)
-        .approve(gUniRouter.address, ethers.utils.parseEther("100000"));
+        .approve(harvesterV1Router.address, ethers.utils.parseEther("100000"));
       const balance0Before = await token0.balanceOf(await wallet.getAddress());
       const balance1Before = await token1.balanceOf(await wallet.getAddress());
-      const balanceGUniBefore = await gUniToken.balanceOf(
+      const balanceHarvesterV1Before = await rakisToken.balanceOf(
         await wallet.getAddress()
       );
 
@@ -180,14 +192,14 @@ describe("G-UNI Router (with Blacklist) tests", function () {
 
       const { zeroForOne: isZero, swapAmount } =
         await resolver.getRebalanceParams(
-          gUniPool.address,
+          harvesterV1.address,
           input0,
           input1,
           normalized.toString()
         );
 
-      await gUniRouter.rebalanceAndAddLiquidity(
-        gUniPool.address,
+      await harvesterV1Router.rebalanceAndAddLiquidity(
+        harvesterV1.address,
         input0,
         input1,
         isZero,
@@ -202,58 +214,64 @@ describe("G-UNI Router (with Blacklist) tests", function () {
 
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
-      const balanceGUniAfter = await gUniToken.balanceOf(
+      const balanceHarvesterV1After = await rakisToken.balanceOf(
         await wallet.getAddress()
       );
       expect(balance0Before).to.be.gt(balance0After);
       expect(balance1Before).to.be.gt(balance1After);
-      expect(balanceGUniBefore).to.be.lt(balanceGUniAfter);
+      expect(balanceHarvesterV1Before).to.be.lt(balanceHarvesterV1After);
 
-      const contractBalance0 = await token0.balanceOf(gUniRouter.address);
-      const contractBalance1 = await token1.balanceOf(gUniRouter.address);
-      const contractBalanceG = await gUniToken.balanceOf(gUniRouter.address);
+      const contractBalance0 = await token0.balanceOf(
+        harvesterV1Router.address
+      );
+      const contractBalance1 = await token1.balanceOf(
+        harvesterV1Router.address
+      );
+      const contractBalanceG = await rakisToken.balanceOf(
+        harvesterV1Router.address
+      );
 
       expect(contractBalance0).to.equal(ethers.constants.Zero);
       expect(contractBalance1).to.equal(ethers.constants.Zero);
       expect(contractBalanceG).to.equal(ethers.constants.Zero);
     });
   });
-  describe("withdrawal through GUniRouter", function () {
+  describe("withdrawal through HarvesterV1Router", function () {
     it("should withdraw funds with removeLiquidity", async function () {
-      const balanceGUniBefore = await gUniToken.balanceOf(
+      const balanceHarvesterV1Before = await rakisToken.balanceOf(
         await wallet.getAddress()
       );
-      expect(balanceGUniBefore).to.be.gt(ethers.constants.Zero);
+      expect(balanceHarvesterV1Before).to.be.gt(ethers.constants.Zero);
       const balance0Before = await token0.balanceOf(await wallet.getAddress());
       const balance1Before = await token1.balanceOf(await wallet.getAddress());
-      await gUniToken.approve(
-        gUniRouter.address,
+      await rakisToken.approve(
+        harvesterV1Router.address,
         ethers.utils.parseEther("100000000")
       );
-      await gUniRouter.removeLiquidity(
-        gUniPool.address,
-        balanceGUniBefore,
+      await harvesterV1Router.removeLiquidity(
+        harvesterV1.address,
+        balanceHarvesterV1Before,
         0,
         0,
         await wallet.getAddress()
       );
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
-      const balanceGUniAfter = await gUniToken.balanceOf(
+      const balanceHarvesterV1After = await rakisToken.balanceOf(
         await wallet.getAddress()
       );
 
       expect(balance0After).to.be.gt(balance0Before);
       expect(balance1After).to.be.gt(balance1Before);
-      expect(balanceGUniBefore).to.be.gt(balanceGUniAfter);
+      expect(balanceHarvesterV1Before).to.be.gt(balanceHarvesterV1After);
     });
   });
   describe("ETH methods", function () {
     it("addLiquidityETH, rebalanceAndAddLiquidityETH, removeLiquidityETH", async function () {
       const gUniWethPool = (await ethers.getContractAt(
-        "IGUniPool",
-        addresses.GUniWethPool
-      )) as IGUniPool;
+        "IHarvesterV1",
+        addresses.HarvesterV1WethPool
+      )) as IHarvesterV1;
       const token0W = (await ethers.getContractAt(
         "IERC20",
         await gUniWethPool.token0()
@@ -262,9 +280,9 @@ describe("G-UNI Router (with Blacklist) tests", function () {
         "IERC20",
         await gUniWethPool.token1()
       )) as IERC20;
-      const gUniTokenW = (await ethers.getContractAt(
+      const rakisTokenW = (await ethers.getContractAt(
         "IERC20",
-        addresses.GUniWethPool
+        addresses.HarvesterV1WethPool
       )) as IERC20;
       const decimals0W = Number(
         await (
@@ -294,19 +312,19 @@ describe("G-UNI Router (with Blacklist) tests", function () {
 
       await token0W
         .connect(wallet)
-        .approve(gUniRouter.address, ethers.utils.parseEther("1000000"));
+        .approve(harvesterV1Router.address, ethers.utils.parseEther("1000000"));
       let balance0Before = await token0W.balanceOf(await wallet.getAddress());
       let balance1Before = await wallet.provider?.getBalance(
         await wallet.getAddress()
       );
-      let balanceGUniBefore = await gUniTokenW.balanceOf(
+      let balanceHarvesterV1Before = await rakisTokenW.balanceOf(
         await wallet.getAddress()
       );
 
       const input0 = "100000000";
       const input1 = WAD.mul(ethers.BigNumber.from("1"));
 
-      await gUniRouter.addLiquidityETH(
+      await harvesterV1Router.addLiquidityETH(
         gUniWethPool.address,
         input0,
         input1,
@@ -320,19 +338,21 @@ describe("G-UNI Router (with Blacklist) tests", function () {
       let balance1After = await wallet.provider?.getBalance(
         await wallet.getAddress()
       );
-      let balanceGUniAfter = await gUniTokenW.balanceOf(
+      let balanceHarvesterV1After = await rakisTokenW.balanceOf(
         await wallet.getAddress()
       );
 
       expect(balance0Before).to.be.gt(balance0After);
       expect(balance1Before).to.be.gt(balance1After);
-      expect(balanceGUniBefore).to.be.lt(balanceGUniAfter);
+      expect(balanceHarvesterV1Before).to.be.lt(balanceHarvesterV1After);
 
-      let contractBalance0 = await token0W.balanceOf(gUniRouter.address);
-      let contractBalance1 = await token1W.balanceOf(gUniRouter.address);
-      let contractBalanceG = await gUniTokenW.balanceOf(gUniRouter.address);
+      let contractBalance0 = await token0W.balanceOf(harvesterV1Router.address);
+      let contractBalance1 = await token1W.balanceOf(harvesterV1Router.address);
+      let contractBalanceG = await rakisTokenW.balanceOf(
+        harvesterV1Router.address
+      );
       let contractBalanceEth = await wallet.provider?.getBalance(
-        gUniRouter.address
+        harvesterV1Router.address
       );
 
       expect(contractBalance0).to.equal(ethers.constants.Zero);
@@ -342,7 +362,7 @@ describe("G-UNI Router (with Blacklist) tests", function () {
 
       balance0Before = balance0After;
       balance1Before = balance1After;
-      balanceGUniBefore = balanceGUniAfter;
+      balanceHarvesterV1Before = balanceHarvesterV1After;
 
       // rebalanceAndAddLiquidityETH
 
@@ -363,7 +383,7 @@ describe("G-UNI Router (with Blacklist) tests", function () {
           normalized.toString()
         );
 
-      await gUniRouter.rebalanceAndAddLiquidityETH(
+      await harvesterV1Router.rebalanceAndAddLiquidityETH(
         gUniWethPool.address,
         input0,
         input1,
@@ -382,16 +402,18 @@ describe("G-UNI Router (with Blacklist) tests", function () {
       balance1After = await wallet.provider?.getBalance(
         await wallet.getAddress()
       );
-      balanceGUniAfter = await gUniTokenW.balanceOf(await wallet.getAddress());
+      balanceHarvesterV1After = await rakisTokenW.balanceOf(
+        await wallet.getAddress()
+      );
       expect(balance0Before).to.be.gt(balance0After);
       expect(balance1Before).to.be.gt(balance1After);
-      expect(balanceGUniBefore).to.be.lt(balanceGUniAfter);
+      expect(balanceHarvesterV1Before).to.be.lt(balanceHarvesterV1After);
 
-      contractBalance0 = await token0W.balanceOf(gUniRouter.address);
-      contractBalance1 = await token1W.balanceOf(gUniRouter.address);
-      contractBalanceG = await gUniTokenW.balanceOf(gUniRouter.address);
+      contractBalance0 = await token0W.balanceOf(harvesterV1Router.address);
+      contractBalance1 = await token1W.balanceOf(harvesterV1Router.address);
+      contractBalanceG = await rakisTokenW.balanceOf(harvesterV1Router.address);
       contractBalanceEth = await wallet.provider?.getBalance(
-        gUniRouter.address
+        harvesterV1Router.address
       );
 
       expect(contractBalance0).to.equal(ethers.constants.Zero);
@@ -401,14 +423,17 @@ describe("G-UNI Router (with Blacklist) tests", function () {
 
       balance0Before = balance0After;
       balance1Before = balance1After;
-      balanceGUniBefore = balanceGUniAfter;
+      balanceHarvesterV1Before = balanceHarvesterV1After;
 
       // removeLiquidityETH
 
-      await gUniTokenW.approve(gUniRouter.address, balanceGUniBefore);
-      await gUniRouter.removeLiquidityETH(
+      await rakisTokenW.approve(
+        harvesterV1Router.address,
+        balanceHarvesterV1Before
+      );
+      await harvesterV1Router.removeLiquidityETH(
         gUniWethPool.address,
-        balanceGUniBefore,
+        balanceHarvesterV1Before,
         0,
         0,
         await wallet.getAddress()
@@ -417,18 +442,20 @@ describe("G-UNI Router (with Blacklist) tests", function () {
       balance1After = await wallet.provider?.getBalance(
         await wallet.getAddress()
       );
-      balanceGUniAfter = await gUniToken.balanceOf(await wallet.getAddress());
+      balanceHarvesterV1After = await rakisToken.balanceOf(
+        await wallet.getAddress()
+      );
 
       expect(balance0After).to.be.gt(balance0Before);
       expect(balance1After).to.be.gt(balance1Before);
-      expect(balanceGUniBefore).to.be.gt(balanceGUniAfter);
-      expect(balanceGUniAfter).to.equal(ethers.constants.Zero);
+      expect(balanceHarvesterV1Before).to.be.gt(balanceHarvesterV1After);
+      expect(balanceHarvesterV1After).to.equal(ethers.constants.Zero);
 
-      contractBalance0 = await token0W.balanceOf(gUniRouter.address);
-      contractBalance1 = await token1W.balanceOf(gUniRouter.address);
-      contractBalanceG = await gUniTokenW.balanceOf(gUniRouter.address);
+      contractBalance0 = await token0W.balanceOf(harvesterV1Router.address);
+      contractBalance1 = await token1W.balanceOf(harvesterV1Router.address);
+      contractBalanceG = await rakisTokenW.balanceOf(harvesterV1Router.address);
       contractBalanceEth = await wallet.provider?.getBalance(
-        gUniRouter.address
+        harvesterV1Router.address
       );
 
       expect(contractBalance0).to.equal(ethers.constants.Zero);

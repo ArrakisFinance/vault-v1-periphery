@@ -7,7 +7,7 @@ import {
     IUniswapV3Pool
 } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
-interface IGUniPool {
+interface IHarvesterV1 {
     function mint(uint256 mintAmount, address receiver)
         external
         returns (
