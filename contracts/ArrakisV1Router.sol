@@ -2,8 +2,8 @@
 
 pragma solidity 0.8.4;
 
-import {IHarvesterV1Router} from "./interfaces/IHarvesterV1Router.sol";
-import {IHarvesterV1} from "./interfaces/IHarvesterV1.sol";
+import {IArrakisV1Router} from "./interfaces/IArrakisV1Router.sol";
+import {IArrakisVaultV1} from "./interfaces/IArrakisVaultV1.sol";
 import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {
@@ -27,8 +27,8 @@ import {
     OwnableUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-contract HarvesterV1Router is
-    IHarvesterV1Router,
+contract ArrakisV1Router is
+    IArrakisV1Router,
     IUniswapV3SwapCallback,
     Initializable,
     PausableUpgradeable,
@@ -81,19 +81,19 @@ contract HarvesterV1Router is
             IERC20(token1).safeTransfer(msg.sender, uint256(amount1Delta));
     }
 
-    /// @notice addLiquidity adds liquidity to HarvesterV1 pool of interest (mints LP tokens)
-    /// @param pool address of HarvesterV1 pool to add liquidity to
+    /// @notice addLiquidity adds liquidity to ArrakisVaultV1 pool of interest (mints LP tokens)
+    /// @param pool address of ArrakisVaultV1 pool to add liquidity to
     /// @param amount0Max the maximum amount of token0 msg.sender willing to input
     /// @param amount1Max the maximum amount of token1 msg.sender willing to input
     /// @param amount0Min the minimum amount of token0 actually input (slippage protection)
     /// @param amount1Min the minimum amount of token1 actually input (slippage protection)
-    /// @param receiver account to receive minted HarvesterV1 tokens
+    /// @param receiver account to receive minted ArrakisVaultV1 tokens
     /// @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
     /// @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
-    /// @return mintAmount amount of HarvesterV1 tokens minted and transferred to `receiver`
+    /// @return mintAmount amount of ArrakisVaultV1 tokens minted and transferred to `receiver`
     // solhint-disable-next-line function-max-lines
     function addLiquidity(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
@@ -131,7 +131,7 @@ contract HarvesterV1Router is
     /// @notice addLiquidityETH same as addLiquidity but expects ETH transfers (instead of WETH)
     // solhint-disable-next-line code-complexity, function-max-lines
     function addLiquidityETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
@@ -203,7 +203,7 @@ contract HarvesterV1Router is
 
     /// @notice rebalanceAndAddLiquidity accomplishes same task as addLiquidity/addLiquidityETH
     /// but msg.sender rebalances their holdings (performs a swap) before adding liquidity.
-    /// @param pool address of HarvesterV1 pool to add liquidity to
+    /// @param pool address of ArrakisVaultV1 pool to add liquidity to
     /// @param amount0In the amount of token0 msg.sender forwards to router
     /// @param amount1In the amount of token1 msg.sender forwards to router
     /// @param zeroForOne Which token to swap (true = token0, false = token1)
@@ -211,16 +211,16 @@ contract HarvesterV1Router is
     /// @param swapThreshold the slippage parameter of the swap as a min or max sqrtPriceX96
     /// @param amount0Min the minimum amount of token0 actually deposited (slippage protection)
     /// @param amount1Min the minimum amount of token1 actually deposited (slippage protection)
-    /// @param receiver account to receive minted HarvesterV1 tokens
+    /// @param receiver account to receive minted ArrakisVaultV1 tokens
     /// @return amount0 amount of token0 actually deposited into pool
     /// @return amount1 amount of token1 actually deposited into pool
-    /// @return mintAmount amount of HarvesterV1 tokens minted and transferred to `receiver`
+    /// @return mintAmount amount of ArrakisVaultV1 tokens minted and transferred to `receiver`
     /// @dev because router performs a swap on behalf of msg.sender and slippage is possible
     /// some value unused in mint can be returned to msg.sender in token0 and token1 make sure
     /// to consult return values or measure balance changes after a rebalanceAndAddLiquidity call.
     // solhint-disable-next-line function-max-lines
     function rebalanceAndAddLiquidity(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -260,7 +260,7 @@ contract HarvesterV1Router is
     /// except this function expects ETH transfer (instead of WETH)
     // solhint-disable-next-line function-max-lines, code-complexity
     function rebalanceAndAddLiquidityETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -310,8 +310,8 @@ contract HarvesterV1Router is
         }
     }
 
-    /// @notice removeLiquidity removes liquidity from a HarvesterV1 pool and burns LP tokens
-    /// @param burnAmount The number of HarvesterV1 tokens to burn
+    /// @notice removeLiquidity removes liquidity from a ArrakisVaultV1 pool and burns LP tokens
+    /// @param burnAmount The number of ArrakisVaultV1 tokens to burn
     /// @param amount0Min Minimum amount of token0 received after burn (slippage protection)
     /// @param amount1Min Minimum amount of token1 received after burn (slippage protection)
     /// @param receiver The account to receive the underlying amounts of token0 and token1
@@ -319,7 +319,7 @@ contract HarvesterV1Router is
     /// @return amount1 actual amount of token1 transferred to receiver for burning `burnAmount`
     /// @return liquidityBurned amount of liquidity removed from the underlying Uniswap V3 position
     function removeLiquidity(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,
@@ -350,7 +350,7 @@ contract HarvesterV1Router is
     /// except this function unwraps WETH and sends ETH to receiver account
     // solhint-disable-next-line code-complexity, function-max-lines
     function removeLiquidityETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,
@@ -404,7 +404,7 @@ contract HarvesterV1Router is
     }
 
     function _deposit(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         uint256 _mintAmount,
@@ -434,7 +434,7 @@ contract HarvesterV1Router is
 
     // solhint-disable-next-line function-max-lines
     function _prepareRebalanceDeposit(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -471,7 +471,7 @@ contract HarvesterV1Router is
 
     // solhint-disable-next-line code-complexity, function-max-lines
     function _prepareAndRebalanceDepositETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -527,7 +527,7 @@ contract HarvesterV1Router is
     }
 
     function _swap(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         bool zeroForOne,
         int256 swapAmount,
         uint160 swapThreshold
@@ -542,7 +542,7 @@ contract HarvesterV1Router is
     }
 
     function _getAmountsAndRefund(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max
     )
@@ -566,7 +566,7 @@ contract HarvesterV1Router is
     }
 
     function _getAmountsAndRefundExceptETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         bool wethToken0

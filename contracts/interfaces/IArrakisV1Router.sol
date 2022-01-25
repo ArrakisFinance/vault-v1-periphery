@@ -2,11 +2,11 @@
 
 pragma solidity 0.8.4;
 
-import {IHarvesterV1} from "./IHarvesterV1.sol";
+import {IArrakisVaultV1} from "./IArrakisVaultV1.sol";
 
-interface IHarvesterV1Router {
+interface IArrakisV1Router {
     function addLiquidity(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
@@ -21,7 +21,7 @@ interface IHarvesterV1Router {
         );
 
     function addLiquidityETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
@@ -37,7 +37,7 @@ interface IHarvesterV1Router {
         );
 
     function rebalanceAndAddLiquidity(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -55,7 +55,7 @@ interface IHarvesterV1Router {
         );
 
     function rebalanceAndAddLiquidityETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 amount0In,
         uint256 amount1In,
         bool zeroForOne,
@@ -74,7 +74,7 @@ interface IHarvesterV1Router {
         );
 
     function removeLiquidity(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,
@@ -88,7 +88,7 @@ interface IHarvesterV1Router {
         );
 
     function removeLiquidityETH(
-        IHarvesterV1 pool,
+        IArrakisVaultV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,
