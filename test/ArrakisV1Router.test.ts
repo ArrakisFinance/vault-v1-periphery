@@ -255,17 +255,17 @@ describe("ArrakisV1 Router tests", function () {
   });
   describe("ETH methods", function () {
     it("addLiquidityETH, rebalanceAndAddLiquidityETH, removeLiquidityETH", async function () {
-      const gUniWethPool = (await ethers.getContractAt(
+      const arrakisWethVault = (await ethers.getContractAt(
         "IArrakisVaultV1",
         addresses.ArrakisV1WethPool
       )) as IArrakisVaultV1;
       const token0W = (await ethers.getContractAt(
         "IERC20",
-        await gUniWethPool.token0()
+        await arrakisWethVault.token0()
       )) as IERC20;
       const token1W = (await ethers.getContractAt(
         "IERC20",
-        await gUniWethPool.token1()
+        await arrakisWethVault.token1()
       )) as IERC20;
       const rakisTokenW = (await ethers.getContractAt(
         "IERC20",
@@ -290,10 +290,10 @@ describe("ArrakisV1 Router tests", function () {
 
       const poolW = (await ethers.getContractAt(
         "IUniswapV3Pool",
-        await gUniWethPool.pool()
+        await arrakisWethVault.pool()
       )) as IUniswapV3Pool;
 
-      expect(await gUniWethPool.token1()).to.equal(addresses.WETH);
+      expect(await arrakisWethVault.token1()).to.equal(addresses.WETH);
 
       // addLiquidityETH
 
@@ -312,7 +312,7 @@ describe("ArrakisV1 Router tests", function () {
       const input1 = WAD.mul(ethers.BigNumber.from("1"));
 
       await vaultRouter.addLiquidityETH(
-        gUniWethPool.address,
+        arrakisWethVault.address,
         input0,
         input1,
         0,
@@ -362,14 +362,14 @@ describe("ArrakisV1 Router tests", function () {
 
       const { zeroForOne: isZero, swapAmount } =
         await resolver.getRebalanceParams(
-          gUniWethPool.address,
+          arrakisWethVault.address,
           input0,
           input1,
           normalized.toString()
         );
 
       await vaultRouter.rebalanceAndAddLiquidityETH(
-        gUniWethPool.address,
+        arrakisWethVault.address,
         input0,
         input1,
         isZero,
@@ -414,7 +414,7 @@ describe("ArrakisV1 Router tests", function () {
 
       await rakisTokenW.approve(vaultRouter.address, balanceArrakisV1Before);
       await vaultRouter.removeLiquidityETH(
-        gUniWethPool.address,
+        arrakisWethVault.address,
         balanceArrakisV1Before,
         0,
         0,
@@ -424,7 +424,7 @@ describe("ArrakisV1 Router tests", function () {
       balance1After = await wallet.provider?.getBalance(
         await wallet.getAddress()
       );
-      balanceArrakisV1After = await rakisToken.balanceOf(
+      balanceArrakisV1After = await rakisTokenW.balanceOf(
         await wallet.getAddress()
       );
 
