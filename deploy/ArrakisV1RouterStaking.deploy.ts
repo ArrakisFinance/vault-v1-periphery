@@ -32,13 +32,15 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
       },
     },
     args: [addresses.WETH],
+    log: hre.network.name !== "hardhat",
+    gasPrice: hre.ethers.utils.parseUnits("50", "gwei"),
   });
 };
 
 func.skip = async (hre: HardhatRuntimeEnvironment) => {
   const shouldSkip =
     hre.network.name === "mainnet" ||
-    hre.network.name === "polygon" ||
+    //hre.network.name === "polygon" ||
     hre.network.name === "optimism" ||
     hre.network.name === "goerli";
   return shouldSkip ? true : false;
