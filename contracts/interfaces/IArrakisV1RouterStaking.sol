@@ -2,10 +2,7 @@
 
 pragma solidity 0.8.4;
 
-import {
-    IArrakisVaultV1,
-    IArrakisV1RouterBase
-} from "./IArrakisV1RouterBase.sol";
+import {IArrakisV1RouterBase} from "./IArrakisV1RouterBase.sol";
 import {IGauge} from "./IGauge.sol";
 
 interface IArrakisV1RouterStaking is IArrakisV1RouterBase {
