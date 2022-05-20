@@ -58,79 +58,21 @@ contract ArrakisV1RouterStaking is
     /// @param amount0Min the minimum amount of token0 actually input (slippage protection)
     /// @param amount1Min the minimum amount of token1 actually input (slippage protection)
     /// @param receiver account to receive minted ArrakisVaultV1 tokens
+    /// @param useETH bool indicating to use native ETH
+    /// @param gaugeAddress address of gauge to stake in (if 0, don't stake)
     /// @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
     /// @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
     /// @return mintAmount amount of ArrakisVaultV1 tokens minted and transferred to `receiver`
+    // solhint-disable-next-line function-max-lines
     function addLiquidity(
         IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
-        address receiver
-    )
-        external
-        override
-        whenNotPaused
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        )
-    {
-        return
-            _addLiquidity(
-                pool,
-                amount0Max,
-                amount1Max,
-                amount0Min,
-                amount1Min,
-                receiver
-            );
-    }
-
-    /// @notice addLiquidityAndStake same as addLiquidity except Arrakis LP token
-    /// is immediately staked in corresponding LiquidityGauge. New param:
-    /// @param gauge the address of the LiquidityGauge corresponding to the ArrakisVaultV1
-    function addLiquidityAndStake(
-        IGauge gauge,
-        uint256 amount0Max,
-        uint256 amount1Max,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address receiver
-    )
-        external
-        override
-        whenNotPaused
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        )
-    {
-        address pool = gauge.staking_token();
-        (amount0, amount1, mintAmount) = _addLiquidity(
-            IArrakisVaultV1(pool),
-            amount0Max,
-            amount1Max,
-            amount0Min,
-            amount1Min,
-            address(this)
-        );
-
-        IERC20(pool).safeIncreaseAllowance(address(gauge), mintAmount);
-        gauge.deposit(mintAmount, receiver);
-    }
-
-    /// @notice addLiquidityETH same as addLiquidity but expects ETH transfers (instead of WETH)
-    function addLiquidityETH(
-        IArrakisVaultV1 pool,
-        uint256 amount0Max,
-        uint256 amount1Max,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address receiver
+        address receiver,
+        bool useETH,
+        address gaugeAddress
     )
         external
         payable
@@ -142,50 +84,36 @@ contract ArrakisV1RouterStaking is
             uint256 mintAmount
         )
     {
-        return
-            _addLiquidityETH(
+        if (gaugeAddress != address(0)) {
+            require(address(pool) == IGauge(gaugeAddress).staking_token(),
+                "Incorrect gauge!");
+
+            (amount0, amount1, mintAmount) = _addLiquidity(
                 pool,
                 amount0Max,
                 amount1Max,
                 amount0Min,
                 amount1Min,
-                receiver
+                address(this),
+                useETH
             );
-    }
 
-    /// @notice addLiquidityETHAndStake same as addLiquidityETH except Arrakis LP token
-    /// is immediately staked in corresponding LiquidityGauge. New param:
-    /// @param gauge the address of the LiquidityGauge corresponding to the ArrakisVaultV1
-    function addLiquidityETHAndStake(
-        IGauge gauge,
-        uint256 amount0Max,
-        uint256 amount1Max,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address receiver
-    )
-        external
-        payable
-        override
-        whenNotPaused
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        )
-    {
-        address pool = gauge.staking_token();
-        (amount0, amount1, mintAmount) = _addLiquidityETH(
-            IArrakisVaultV1(pool),
-            amount0Max,
-            amount1Max,
-            amount0Min,
-            amount1Min,
-            address(this)
-        );
-
-        IERC20(pool).safeIncreaseAllowance(address(gauge), mintAmount);
-        gauge.deposit(mintAmount, receiver);
+            IERC20(address(pool)).safeIncreaseAllowance(
+                gaugeAddress,
+                mintAmount
+            );
+            IGauge(gaugeAddress).deposit(mintAmount, receiver);
+        } else {
+            (amount0, amount1, mintAmount) = _addLiquidity(
+                pool,
+                amount0Max,
+                amount1Max,
+                amount0Min,
+                amount1Min,
+                receiver,
+                useETH
+            );
+        }
     }
 
     /// @notice removeLiquidity removes liquidity from a ArrakisVaultV1 pool and burns LP tokens
@@ -193,15 +121,20 @@ contract ArrakisV1RouterStaking is
     /// @param amount0Min Minimum amount of token0 received after burn (slippage protection)
     /// @param amount1Min Minimum amount of token1 received after burn (slippage protection)
     /// @param receiver The account to receive the underlying amounts of token0 and token1
+    /// @param receiveETH bool indicating to use native ETH
+    /// @param gaugeAddress address of gauge to unstake from (if 0, don't unstake)
     /// @return amount0 actual amount of token0 transferred to receiver for burning `burnAmount`
     /// @return amount1 actual amount of token1 transferred to receiver for burning `burnAmount`
     /// @return liquidityBurned amount of liquidity removed from the underlying Uniswap V3 position
+    // solhint-disable-next-line code-complexity, function-max-lines
     function removeLiquidity(
         IArrakisVaultV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,
-        address receiver
+        address payable receiver,
+        bool receiveETH,
+        address gaugeAddress
     )
         external
         override
@@ -212,180 +145,33 @@ contract ArrakisV1RouterStaking is
             uint128 liquidityBurned
         )
     {
-        IERC20(address(pool)).safeTransferFrom(
-            msg.sender,
-            address(this),
-            burnAmount
-        );
-        (amount0, amount1, liquidityBurned) = pool.burn(burnAmount, receiver);
-        require(
-            amount0 >= amount0Min && amount1 >= amount1Min,
-            "received below minimum"
-        );
-    }
-
-    /// @notice removeLiquidityAndUnstake same as removeLiquidity except Arrakis LP token
-    /// is first unstaked from liquidity gauge, and all rewards for msg.sender collected. New param:
-    /// @param gauge the address of the LiquidityGauge corresponding to the ArrakisVaultV1
-    function removeLiquidityAndUnstake(
-        IGauge gauge,
-        uint256 burnAmount,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address receiver
-    )
-        external
-        override
-        whenNotPaused
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint128 liquidityBurned
-        )
-    {
-        gauge.claim_rewards(msg.sender);
-        IERC20(address(gauge)).safeTransferFrom(
-            msg.sender,
-            address(this),
-            burnAmount
-        );
-        gauge.withdraw(burnAmount);
-        address pool = gauge.staking_token();
-        (amount0, amount1, liquidityBurned) = IArrakisVaultV1(pool).burn(
-            burnAmount,
-            receiver
-        );
-        require(
-            amount0 >= amount0Min && amount1 >= amount1Min,
-            "received below minimum"
-        );
-    }
-
-    /// @notice removeLiquidityETH same as removeLiquidity
-    /// except this function unwraps WETH and sends ETH to receiver account
-    // solhint-disable-next-line code-complexity, function-max-lines
-    function removeLiquidityETH(
-        IArrakisVaultV1 pool,
-        uint256 burnAmount,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address payable receiver
-    )
-        external
-        override
-        whenNotPaused
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint128 liquidityBurned
-        )
-    {
-        IERC20 token0 = pool.token0();
-        IERC20 token1 = pool.token1();
-
-        bool wethToken0 = _isToken0Weth(address(token0), address(token1));
-
-        IERC20(address(pool)).safeTransferFrom(
-            msg.sender,
-            address(this),
-            burnAmount
-        );
-        (amount0, amount1, liquidityBurned) = pool.burn(
-            burnAmount,
-            address(this)
-        );
-        require(
-            amount0 >= amount0Min && amount1 >= amount1Min,
-            "received below minimum"
-        );
-
-        if (wethToken0) {
-            if (amount0 > 0) {
-                weth.withdraw(amount0);
-                receiver.sendValue(amount0);
-            }
-            if (amount1 > 0) {
-                token1.safeTransfer(receiver, amount1);
-            }
-        } else {
-            if (amount1 > 0) {
-                weth.withdraw(amount1);
-                receiver.sendValue(amount1);
-            }
-            if (amount0 > 0) {
-                token0.safeTransfer(receiver, amount0);
-            }
+        if (gaugeAddress != address(0)) {
+            require(
+                address(pool) == IGauge(gaugeAddress).staking_token(),
+                "Incorrect gauge!"
+            );
+            IGauge(gaugeAddress).claim_rewards(msg.sender);
         }
-    }
-
-    /// @notice removeLiquidityAndUnstake same as removeLiquidity except Arrakis LP token
-    /// is first unstaked from liquidity gauge, and all rewards for msg.sender collected. New param:
-    /// @param gauge the address of the LiquidityGauge corresponding to the ArrakisVaultV1
-    // solhint-disable-next-line code-complexity, function-max-lines
-    function removeLiquidityETHAndUnstake(
-        IGauge gauge,
-        uint256 burnAmount,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address payable receiver
-    )
-        external
-        override
-        whenNotPaused
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint128 liquidityBurned
-        )
-    {
-        gauge.claim_rewards(msg.sender);
-        IERC20(address(gauge)).safeTransferFrom(
-            msg.sender,
-            address(this),
-            burnAmount
-        );
-        gauge.withdraw(burnAmount);
-        address pool = gauge.staking_token();
-        (amount0, amount1, liquidityBurned) = IArrakisVaultV1(pool).burn(
+        (amount0, amount1, liquidityBurned) = _removeLiquidity(
+            pool,
             burnAmount,
-            address(this)
+            amount0Min,
+            amount1Min,
+            receiver,
+            receiveETH,
+            gaugeAddress
         );
-        require(
-            amount0 >= amount0Min && amount1 >= amount1Min,
-            "received below minimum"
-        );
-
-        IERC20 token0 = IArrakisVaultV1(pool).token0();
-        IERC20 token1 = IArrakisVaultV1(pool).token1();
-
-        bool wethToken0 = _isToken0Weth(address(token0), address(token1));
-
-        if (wethToken0) {
-            if (amount0 > 0) {
-                weth.withdraw(amount0);
-                receiver.sendValue(amount0);
-            }
-            if (amount1 > 0) {
-                token1.safeTransfer(receiver, amount1);
-            }
-        } else {
-            if (amount1 > 0) {
-                weth.withdraw(amount1);
-                receiver.sendValue(amount1);
-            }
-            if (amount0 > 0) {
-                token0.safeTransfer(receiver, amount0);
-            }
-        }
     }
 
+    // solhint-disable-next-line code-complexity, function-max-lines
     function _addLiquidity(
         IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
-        address receiver
+        address receiver,
+        bool useETH
     )
         internal
         returns (
@@ -396,89 +182,52 @@ contract ArrakisV1RouterStaking is
     {
         IERC20 token0 = pool.token0();
         IERC20 token1 = pool.token1();
-
-        (uint256 amount0In, uint256 amount1In, uint256 _mintAmount) =
+        uint256 _mintAmount;
+        (amount0, amount1, _mintAmount) =
             pool.getMintAmounts(amount0Max, amount1Max);
         require(
-            amount0In >= amount0Min && amount1In >= amount1Min,
+            amount0 >= amount0Min && amount1 >= amount1Min,
             "below min amounts"
         );
 
-        if (amount0In > 0) {
-            token0.safeTransferFrom(msg.sender, address(this), amount0In);
-        }
-        if (amount1In > 0) {
-            token1.safeTransferFrom(msg.sender, address(this), amount1In);
-        }
-
-        return _deposit(pool, amount0In, amount1In, _mintAmount, receiver);
-    }
-
-    // solhint-disable-next-line code-complexity, function-max-lines
-    function _addLiquidityETH(
-        IArrakisVaultV1 pool,
-        uint256 amount0Max,
-        uint256 amount1Max,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address receiver
-    )
-        internal
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        )
-    {
-        IERC20 token0 = pool.token0();
-        IERC20 token1 = pool.token1();
-
-        (uint256 amount0In, uint256 amount1In, uint256 _mintAmount) =
-            pool.getMintAmounts(amount0Max, amount1Max);
-        require(
-            amount0In >= amount0Min && amount1In >= amount1Min,
-            "below min amounts"
-        );
-
-        if (_isToken0Weth(address(token0), address(token1))) {
+        bool isToken0Weth;
+        if (useETH) {    
+            isToken0Weth = _isToken0Weth(address(token0), address(token1));
             require(
-                amount0Max == msg.value,
+                isToken0Weth && amount0Max == msg.value || !isToken0Weth && amount1Max == msg.value,
                 "mismatching amount of ETH forwarded"
             );
-            if (amount0In > 0) {
-                weth.deposit{value: amount0In}();
+            if (isToken0Weth && amount0 > 0) {
+                weth.deposit{value: amount0}();
+            } 
+            if (!isToken0Weth && amount1 > 0) {
+                weth.deposit{value: amount1}();
             }
-            if (amount1In > 0) {
-                token1.safeTransferFrom(msg.sender, address(this), amount1In);
-            }
-        } else {
-            require(
-                amount1Max == msg.value,
-                "mismatching amount of ETH forwarded"
-            );
-            if (amount1In > 0) {
-                weth.deposit{value: amount1In}();
-            }
-            if (amount0In > 0) {
-                token0.safeTransferFrom(msg.sender, address(this), amount0In);
-            }
+        }
+        if (amount0 > 0 && (!useETH || useETH && !isToken0Weth)) {
+            token0.safeTransferFrom(msg.sender, address(this), amount0);
+        }
+        if (amount1 > 0 && (!useETH || useETH && isToken0Weth)) {
+            token1.safeTransferFrom(msg.sender, address(this), amount1);
         }
 
         (amount0, amount1, mintAmount) = _deposit(
             pool,
-            amount0In,
-            amount1In,
+            amount0,
+            amount1,
             _mintAmount,
             receiver
         );
 
-        if (_isToken0Weth(address(token0), address(token1))) {
-            if (amount0Max > amount0) {
-                payable(msg.sender).sendValue(amount0Max - amount0);
-            }
-        } else {
-            if (amount1Max > amount1) {
-                payable(msg.sender).sendValue(amount1Max - amount1);
+        if (useETH) {
+            if (_isToken0Weth(address(token0), address(token1))) {
+                if (amount0Max > amount0) {
+                    payable(msg.sender).sendValue(amount0Max - amount0);
+                }
+            } else {
+                if (amount1Max > amount1) {
+                    payable(msg.sender).sendValue(amount1Max - amount1);
+                }
             }
         }
     }
@@ -510,6 +259,90 @@ contract ArrakisV1RouterStaking is
             "unexpected amounts deposited"
         );
         mintAmount = _mintAmount;
+    }
+
+    // solhint-disable-next-line function-max-lines
+    function _removeLiquidity(
+        IArrakisVaultV1 pool,
+        uint256 burnAmount,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        address payable receiver,
+        bool receiveETH,
+        address gaugeAddress
+    )
+        internal
+        returns (
+            uint256 amount0,
+            uint256 amount1,
+            uint128 liquidityBurned
+        )
+    {
+        if (gaugeAddress != address(0)) {
+            IERC20(gaugeAddress).safeTransferFrom(
+                msg.sender,
+                address(this),
+                burnAmount
+            );
+
+            IGauge(gaugeAddress).withdraw(burnAmount);
+        } else {
+            IERC20(address(pool)).safeTransferFrom(
+                msg.sender,
+                address(this),
+                burnAmount
+            );
+        }
+
+        if (receiveETH) {
+            (amount0, amount1, liquidityBurned) = pool.burn(
+                burnAmount,
+                address(this)
+            );
+        } else {
+            (amount0, amount1, liquidityBurned) = pool.burn(
+                burnAmount,
+                receiver
+            );
+        }
+
+        require(
+            amount0 >= amount0Min && amount1 >= amount1Min,
+            "received below minimum"
+        );
+
+        if (receiveETH) {
+            _receiveETH(pool, amount0, amount1, receiver);
+        }
+    }
+
+    // solhint-disable-next-line code-complexity
+    function _receiveETH(
+        IArrakisVaultV1 pool,
+        uint256 amount0,
+        uint256 amount1,
+        address payable receiver
+    ) internal {
+        IERC20 token0 = pool.token0();
+        IERC20 token1 = pool.token1();
+        bool wethToken0 = _isToken0Weth(address(token0), address(token1));
+        if (wethToken0) {
+            if (amount0 > 0) {
+                weth.withdraw(amount0);
+                receiver.sendValue(amount0);
+            }
+            if (amount1 > 0) {
+                token1.safeTransfer(receiver, amount1);
+            }
+        } else {
+            if (amount1 > 0) {
+                weth.withdraw(amount1);
+                receiver.sendValue(amount1);
+            }
+            if (amount0 > 0) {
+                token0.safeTransfer(receiver, amount0);
+            }
+        }
     }
 
     function _isToken0Weth(address token0, address token1)

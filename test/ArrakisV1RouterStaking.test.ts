@@ -130,7 +130,9 @@ describe("ArrakisV1 Staking Router tests", function () {
         input1,
         0,
         0,
-        await wallet.getAddress()
+        await wallet.getAddress(),
+        false,
+        "0x0000000000000000000000000000000000000000"
       );
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
@@ -185,13 +187,15 @@ describe("ArrakisV1 Staking Router tests", function () {
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
 
-      await vaultRouter.addLiquidityAndStake(
-        gauge.address,
+      await vaultRouter.addLiquidity(
+        vault.address,
         input0,
         input1,
         0,
         0,
-        await wallet.getAddress()
+        await wallet.getAddress(),
+        false,
+        gauge.address
       );
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
@@ -251,7 +255,9 @@ describe("ArrakisV1 Staking Router tests", function () {
         balanceArrakisV1Before,
         0,
         0,
-        await wallet.getAddress()
+        await wallet.getAddress(),
+        false,
+        "0x0000000000000000000000000000000000000000"
       );
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
@@ -274,12 +280,14 @@ describe("ArrakisV1 Staking Router tests", function () {
         vaultRouter.address,
         ethers.utils.parseEther("100000000")
       );
-      await vaultRouter.removeLiquidityAndUnstake(
-        stRakisToken.address,
+      await vaultRouter.removeLiquidity(
+        vault.address,
         balanceStakedBefore,
         0,
         0,
-        await wallet.getAddress()
+        await wallet.getAddress(),
+        false,
+        gauge.address
       );
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
@@ -330,13 +338,15 @@ describe("ArrakisV1 Staking Router tests", function () {
       const input0 = "100000000";
       const input1 = WAD.mul(ethers.BigNumber.from("2"));
 
-      await vaultRouter.addLiquidityETH(
+      await vaultRouter.addLiquidity(
         arrakisWethVault.address,
         input0,
         input1,
         0,
         0,
         await wallet.getAddress(),
+        true,
+        "0x0000000000000000000000000000000000000000",
         { value: input1 }
       );
 
@@ -371,12 +381,14 @@ describe("ArrakisV1 Staking Router tests", function () {
       // removeLiquidityETH
 
       await rakisTokenW.approve(vaultRouter.address, balanceArrakisV1Before);
-      await vaultRouter.removeLiquidityETH(
+      await vaultRouter.removeLiquidity(
         arrakisWethVault.address,
         balanceArrakisV1Before,
         0,
         0,
-        await wallet.getAddress()
+        await wallet.getAddress(),
+        true,
+        "0x0000000000000000000000000000000000000000"
       );
       balance0After = await token0.balanceOf(await wallet.getAddress());
       balance1After = await wallet.provider?.getBalance(
@@ -478,13 +490,15 @@ describe("ArrakisV1 Staking Router tests", function () {
       const input0 = "100000000";
       const input1 = WAD.mul(ethers.BigNumber.from("2"));
 
-      await vaultRouter.addLiquidityETHAndStake(
-        stRakisToken.address,
+      await vaultRouter.addLiquidity(
+        arrakisWethVault.address,
         input0,
         input1,
         0,
         0,
         await wallet.getAddress(),
+        true,
+        gauge.address,
         { value: input1 }
       );
 
@@ -542,12 +556,14 @@ describe("ArrakisV1 Staking Router tests", function () {
       // removeLiquidityETHAndUnstake
 
       await stRakisToken.approve(vaultRouter.address, balanceStakedBefore);
-      await vaultRouter.removeLiquidityETHAndUnstake(
-        gauge.address,
+      await vaultRouter.removeLiquidity(
+        arrakisWethVault.address,
         balanceStakedBefore,
         0,
         0,
-        await wallet.getAddress()
+        await wallet.getAddress(),
+        true,
+        gauge.address
       );
       balance0After = await token0W.balanceOf(await wallet.getAddress());
       balance1After = await wallet.provider?.getBalance(
