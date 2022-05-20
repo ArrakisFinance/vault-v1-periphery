@@ -85,8 +85,10 @@ contract ArrakisV1RouterStaking is
         )
     {
         if (gaugeAddress != address(0)) {
-            require(address(pool) == IGauge(gaugeAddress).staking_token(),
-                "Incorrect gauge!");
+            require(
+                address(pool) == IGauge(gaugeAddress).staking_token(),
+                "Incorrect gauge!"
+            );
 
             (amount0, amount1, mintAmount) = _addLiquidity(
                 pool,
@@ -183,31 +185,34 @@ contract ArrakisV1RouterStaking is
         IERC20 token0 = pool.token0();
         IERC20 token1 = pool.token1();
         uint256 _mintAmount;
-        (amount0, amount1, _mintAmount) =
-            pool.getMintAmounts(amount0Max, amount1Max);
+        (amount0, amount1, _mintAmount) = pool.getMintAmounts(
+            amount0Max,
+            amount1Max
+        );
         require(
             amount0 >= amount0Min && amount1 >= amount1Min,
             "below min amounts"
         );
 
         bool isToken0Weth;
-        if (useETH) {    
+        if (useETH) {
             isToken0Weth = _isToken0Weth(address(token0), address(token1));
             require(
-                isToken0Weth && amount0Max == msg.value || !isToken0Weth && amount1Max == msg.value,
+                (isToken0Weth && amount0Max == msg.value) ||
+                    (!isToken0Weth && amount1Max == msg.value),
                 "mismatching amount of ETH forwarded"
             );
             if (isToken0Weth && amount0 > 0) {
                 weth.deposit{value: amount0}();
-            } 
+            }
             if (!isToken0Weth && amount1 > 0) {
                 weth.deposit{value: amount1}();
             }
         }
-        if (amount0 > 0 && (!useETH || useETH && !isToken0Weth)) {
+        if (amount0 > 0 && (!useETH || (useETH && !isToken0Weth))) {
             token0.safeTransferFrom(msg.sender, address(this), amount0);
         }
-        if (amount1 > 0 && (!useETH || useETH && isToken0Weth)) {
+        if (amount1 > 0 && (!useETH || (useETH && isToken0Weth))) {
             token1.safeTransferFrom(msg.sender, address(this), amount1);
         }
 
