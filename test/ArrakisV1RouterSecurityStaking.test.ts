@@ -67,7 +67,16 @@ describe("ArrakisV1 Router (with Staking): Security Tests", function () {
 
       await vaultRouter.pause();
       await expect(
-        vaultRouter.addLiquidity(vault.address, 0, 0, 0, 0, walletAddress)
+        vaultRouter.addLiquidity(
+          vault.address,
+          0,
+          0,
+          0,
+          0,
+          walletAddress,
+          false,
+          "0x0000000000000000000000000000000000000000"
+        )
       ).to.be.revertedWith("Pausable: paused");
       await vaultRouter.transferOwnership(proxyOwner);
       const owner = await vaultRouter.owner();

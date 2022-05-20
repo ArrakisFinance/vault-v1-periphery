@@ -2,32 +2,19 @@
 
 pragma solidity 0.8.4;
 
-import {IArrakisV1RouterBase} from "./IArrakisV1RouterBase.sol";
+import {IArrakisVaultV1} from "./IArrakisVaultV1.sol";
 import {IGauge} from "./IGauge.sol";
 
-interface IArrakisV1RouterStaking is IArrakisV1RouterBase {
-    function addLiquidityAndStake(
-        IGauge gauge,
+interface IArrakisV1RouterStaking {
+    function addLiquidity(
+        IArrakisVaultV1 pool,
         uint256 amount0Max,
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
-        address receiver
-    )
-        external
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        );
-
-    function addLiquidityETHAndStake(
-        IGauge gauge,
-        uint256 amount0Max,
-        uint256 amount1Max,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address receiver
+        address receiver,
+        bool useETH,
+        address gaugeAddress
     )
         external
         payable
@@ -37,26 +24,14 @@ interface IArrakisV1RouterStaking is IArrakisV1RouterBase {
             uint256 mintAmount
         );
 
-    function removeLiquidityAndUnstake(
-        IGauge gauge,
+    function removeLiquidity(
+        IArrakisVaultV1 pool,
         uint256 burnAmount,
         uint256 amount0Min,
         uint256 amount1Min,
-        address receiver
-    )
-        external
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint128 liquidityBurned
-        );
-
-    function removeLiquidityETHAndUnstake(
-        IGauge gauge,
-        uint256 burnAmount,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address payable receiver
+        address payable receiver,
+        bool receiveETH,
+        address gaugeAddress
     )
         external
         returns (
