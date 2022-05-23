@@ -4,6 +4,7 @@ import { deployments, ethers, network } from "hardhat";
 import { Addresses, getAddresses } from "../src/addresses";
 import { EIP173ProxyWithReceive } from "../typechain/EIP173ProxyWithReceive";
 import { ArrakisV1RouterStaking } from "../typechain/ArrakisV1RouterStaking";
+// import { AddLiquidityData } from "../typechain/IArrakisV1RouterStaking";
 import { IArrakisVaultV1 } from "../typechain/IArrakisVaultV1";
 
 let addresses: Addresses;
@@ -66,17 +67,18 @@ describe("ArrakisV1 Router (with Staking): Security Tests", function () {
       const proxyOwner = await proxy.proxyAdmin();
 
       await vaultRouter.pause();
+
+      const addLiquidityData = {
+        amount0Max: 0,
+        amount1Max: 0,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: walletAddress,
+        useETH: false,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
       await expect(
-        vaultRouter.addLiquidity(
-          vault.address,
-          0,
-          0,
-          0,
-          0,
-          walletAddress,
-          false,
-          "0x0000000000000000000000000000000000000000"
-        )
+        vaultRouter.addLiquidity(vault.address, addLiquidityData)
       ).to.be.revertedWith("Pausable: paused");
       await vaultRouter.transferOwnership(proxyOwner);
       const owner = await vaultRouter.owner();
