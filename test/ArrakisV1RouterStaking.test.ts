@@ -123,17 +123,16 @@ describe("ArrakisV1 Staking Router tests", function () {
 
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
-
-      await vaultRouter.addLiquidity(
-        vault.address,
-        input0,
-        input1,
-        0,
-        0,
-        await wallet.getAddress(),
-        false,
-        "0x0000000000000000000000000000000000000000"
-      );
+      const addLiquidityData = {
+        amount0Max: input0,
+        amount1Max: input1,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        useETH: false,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
+      await vaultRouter.addLiquidity(vault.address, addLiquidityData);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceArrakisV1After = await rakisToken.balanceOf(
@@ -186,17 +185,16 @@ describe("ArrakisV1 Staking Router tests", function () {
 
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
-
-      await vaultRouter.addLiquidity(
-        vault.address,
-        input0,
-        input1,
-        0,
-        0,
-        await wallet.getAddress(),
-        false,
-        gauge.address
-      );
+      const addLiquidityData = {
+        amount0Max: input0,
+        amount1Max: input1,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        useETH: false,
+        gaugeAddress: gauge.address,
+      };
+      await vaultRouter.addLiquidity(vault.address, addLiquidityData);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceStakedAfter = await stRakisToken.balanceOf(
@@ -337,16 +335,18 @@ describe("ArrakisV1 Staking Router tests", function () {
 
       const input0 = "100000000";
       const input1 = WAD.mul(ethers.BigNumber.from("2"));
-
+      const addLiquidityData = {
+        amount0Max: input0,
+        amount1Max: input1,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        useETH: true,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
       await vaultRouter.addLiquidity(
         arrakisWethVault.address,
-        input0,
-        input1,
-        0,
-        0,
-        await wallet.getAddress(),
-        true,
-        "0x0000000000000000000000000000000000000000",
+        addLiquidityData,
         { value: input1 }
       );
 
@@ -489,16 +489,18 @@ describe("ArrakisV1 Staking Router tests", function () {
 
       const input0 = "100000000";
       const input1 = WAD.mul(ethers.BigNumber.from("2"));
-
+      const addLiquidityData = {
+        amount0Max: input0,
+        amount1Max: input1,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        useETH: true,
+        gaugeAddress: gauge.address,
+      };
       await vaultRouter.addLiquidity(
         arrakisWethVault.address,
-        input0,
-        input1,
-        0,
-        0,
-        await wallet.getAddress(),
-        true,
-        gauge.address,
+        addLiquidityData,
         { value: input1 }
       );
 
