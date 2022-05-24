@@ -22,6 +22,15 @@ struct AddLiquidityData {
     address gaugeAddress;
 }
 
+struct MintData {
+    // amount of token0 to deposit
+    uint256 amount0In;
+    // amount of token1 to deposit
+    uint256 amount1In;
+    // amount of LP tokens to mint
+    uint256 mintAmount;
+}
+
 struct SwapData {
     // max amount being swapped
     uint256 amountInSwap;
@@ -38,7 +47,8 @@ struct SwapData {
 interface IArrakisV1RouterStaking {
     function addLiquidity(
         IArrakisVaultV1 pool,
-        AddLiquidityData memory _addData
+        AddLiquidityData memory _addData,
+        MintData memory _mintData
     )
         external
         payable

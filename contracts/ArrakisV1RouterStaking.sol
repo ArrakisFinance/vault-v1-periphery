@@ -6,7 +6,8 @@ import {
     IGauge,
     IArrakisV1RouterStaking,
     AddLiquidityData,
-    SwapData
+    SwapData,
+    MintData
 } from "./interfaces/IArrakisV1RouterStaking.sol";
 import {IArrakisVaultV1} from "./interfaces/IArrakisVaultV1.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
@@ -36,9 +37,16 @@ contract ArrakisV1RouterStaking is
     using SafeERC20 for IERC20;
 
     IWETH public immutable weth;
+    address public immutable routerWrapperAddress;
 
-    constructor(IWETH _weth) {
+    modifier onlyRouterWrapper() {
+        require(msg.sender == routerWrapperAddress, "onlyRouterWrapper");
+        _;
+    }
+
+    constructor(IWETH _weth, address _routerWrapperAddress) {
         weth = _weth;
+        routerWrapperAddress = _routerWrapperAddress;
     }
 
     function initialize() external initializer {
@@ -57,18 +65,21 @@ contract ArrakisV1RouterStaking is
     /// @notice addLiquidity adds liquidity to ArrakisVaultV1 pool of interest (mints LP tokens)
     /// @param pool address of ArrakisVaultV1 pool to add liquidity to
     /// @param _addData AddLiquidityData struct containing data for adding liquidity
+    /// @param _mintData MintData struct containing exact amounts for minting
     /// @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
     /// @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
     /// @return mintAmount amount of ArrakisVaultV1 tokens minted and transferred to `receiver`
-    // solhint-disable-next-line function-max-lines
+    // solhint-disable-next-line code-complexity, function-max-lines
     function addLiquidity(
         IArrakisVaultV1 pool,
-        AddLiquidityData memory _addData
+        AddLiquidityData memory _addData,
+        MintData memory _mintData
     )
         external
         payable
         override
         whenNotPaused
+        onlyRouterWrapper
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -76,19 +87,12 @@ contract ArrakisV1RouterStaking is
         )
     {
         if (_addData.gaugeAddress != address(0)) {
-            require(
-                address(pool) == IGauge(_addData.gaugeAddress).staking_token(),
-                "Incorrect gauge!"
-            );
-
-            (amount0, amount1, mintAmount) = _addLiquidity(
+            (amount0, amount1, mintAmount) = _deposit(
                 pool,
-                _addData.amount0Max,
-                _addData.amount1Max,
-                _addData.amount0Min,
-                _addData.amount1Min,
-                address(this),
-                _addData.useETH
+                _mintData.amount0In,
+                _mintData.amount1In,
+                _mintData.mintAmount,
+                address(this)
             );
 
             IERC20(address(pool)).safeIncreaseAllowance(
@@ -100,14 +104,12 @@ contract ArrakisV1RouterStaking is
                 _addData.receiver
             );
         } else {
-            (amount0, amount1, mintAmount) = _addLiquidity(
+            (amount0, amount1, mintAmount) = _deposit(
                 pool,
-                _addData.amount0Max,
-                _addData.amount1Max,
-                _addData.amount0Min,
-                _addData.amount1Min,
-                _addData.receiver,
-                _addData.useETH
+                _mintData.amount0In,
+                _mintData.amount1In,
+                _mintData.mintAmount,
+                _addData.receiver
             );
         }
     }
@@ -177,6 +179,7 @@ contract ArrakisV1RouterStaking is
         payable
         override
         whenNotPaused
+        onlyRouterWrapper
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -265,74 +268,6 @@ contract ArrakisV1RouterStaking is
         //         payable(msg.sender).sendValue(_addData.amount1Max - amount1);
         //     }
         // }
-    }
-
-    // solhint-disable-next-line code-complexity, function-max-lines
-    function _addLiquidity(
-        IArrakisVaultV1 pool,
-        uint256 amount0Max,
-        uint256 amount1Max,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address receiver,
-        bool useETH
-    )
-        internal
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        )
-    {
-        IERC20 token0 = pool.token0();
-        IERC20 token1 = pool.token1();
-        uint256 _mintAmount;
-        (amount0, amount1, _mintAmount) = pool.getMintAmounts(
-            amount0Max,
-            amount1Max
-        );
-        require(
-            amount0 >= amount0Min && amount1 >= amount1Min,
-            "below min amounts"
-        );
-
-        bool isToken0Weth;
-        if (useETH) {
-            isToken0Weth = _isToken0Weth(address(token0), address(token1));
-            require(
-                (isToken0Weth && amount0Max == msg.value) ||
-                    (!isToken0Weth && amount1Max == msg.value),
-                "mismatching amount of ETH forwarded"
-            );
-            if (isToken0Weth && amount0 > 0) {
-                weth.deposit{value: amount0}();
-            }
-            if (!isToken0Weth && amount1 > 0) {
-                weth.deposit{value: amount1}();
-            }
-        }
-        if (amount0 > 0 && (!useETH || (useETH && !isToken0Weth))) {
-            token0.safeTransferFrom(msg.sender, address(this), amount0);
-        }
-        if (amount1 > 0 && (!useETH || (useETH && isToken0Weth))) {
-            token1.safeTransferFrom(msg.sender, address(this), amount1);
-        }
-
-        (amount0, amount1, mintAmount) = _deposit(
-            pool,
-            amount0,
-            amount1,
-            _mintAmount,
-            receiver
-        );
-
-        if (useETH) {
-            if (isToken0Weth && amount0Max > amount0) {
-                payable(msg.sender).sendValue(amount0Max - amount0);
-            } else if (!isToken0Weth && amount1Max > amount1) {
-                payable(msg.sender).sendValue(amount1Max - amount1);
-            }
-        }
     }
 
     function _deposit(
