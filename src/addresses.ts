@@ -8,6 +8,7 @@ export interface Addresses {
   WETH: string;
   ArrakisDevMultiSig: string;
   ArrakisV1WethPool: string;
+  OneInchRouter: string;
 }
 
 export const getAddresses = (network: string): Addresses => {
@@ -22,6 +23,7 @@ export const getAddresses = (network: string): Addresses => {
         WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "0xa6c49FD13E50a30C65E6C8480aADA132011D0613",
+        OneInchRouter: "0x1111111254fb6c44bac0bed2854e76f90643097d",
       };
     case "mainnet":
       return {
@@ -33,6 +35,7 @@ export const getAddresses = (network: string): Addresses => {
         WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "0xa6c49FD13E50a30C65E6C8480aADA132011D0613",
+        OneInchRouter: "0x1111111254fb6c44bac0bed2854e76f90643097d",
       };
     case "goerli":
       return {
@@ -44,6 +47,7 @@ export const getAddresses = (network: string): Addresses => {
         WETH: "0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6",
         ArrakisDevMultiSig: "0xAabB54394E8dd61Dd70897E9c80be8de7C64A895",
         ArrakisV1WethPool: "",
+        OneInchRouter: "",
       };
     case "polygon":
       return {
@@ -55,6 +59,7 @@ export const getAddresses = (network: string): Addresses => {
         WETH: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "",
+        OneInchRouter: "",
       };
     case "optimism":
       return {
@@ -66,6 +71,7 @@ export const getAddresses = (network: string): Addresses => {
         WETH: "0x4200000000000000000000000000000000000006",
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "",
+        OneInchRouter: "",
       };
     default:
       throw new Error(`No addresses for Network: ${network}`);
