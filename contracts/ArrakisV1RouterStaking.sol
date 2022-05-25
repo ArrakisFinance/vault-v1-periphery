@@ -347,12 +347,12 @@ contract ArrakisV1RouterStaking is
         uint256 balance1Before = _pool.token1().balanceOf(address(this));
 
         if (_swapData.zeroForOne) {
-            IERC20(_pool.token0()).safeApprove(
+            IERC20(_pool.token0()).safeIncreaseAllowance(
                 _swapData.swapRouter,
                 _swapData.amountInSwap
             );
         } else {
-            IERC20(_pool.token1()).safeApprove(
+            IERC20(_pool.token1()).safeIncreaseAllowance(
                 _swapData.swapRouter,
                 _swapData.amountInSwap
             );
@@ -361,6 +361,25 @@ contract ArrakisV1RouterStaking is
         (bool success, bytes memory returnsData) =
             _swapData.swapRouter.call(_swapData.swapPayload[0]);
         if (!success) GelatoBytes.revertWithError(returnsData, "swap: ");
+
+        // setting allowance to 0
+        if (_swapData.zeroForOne) {
+            IERC20(_pool.token0()).safeDecreaseAllowance(
+                _swapData.swapRouter,
+                IERC20(_pool.token0()).allowance(
+                    address(this),
+                    _swapData.swapRouter
+                )
+            );
+        } else {
+            IERC20(_pool.token1()).safeDecreaseAllowance(
+                _swapData.swapRouter,
+                IERC20(_pool.token1()).allowance(
+                    address(this),
+                    _swapData.swapRouter
+                )
+            );
+        }
 
         uint256 balance0 = _pool.token0().balanceOf(address(this));
         uint256 balance1 = _pool.token1().balanceOf(address(this));
