@@ -277,18 +277,18 @@ describe("ArrakisV1 Staking Router tests", function () {
       const balance0Before = await token0.balanceOf(await wallet.getAddress());
       const balance1Before = await token1.balanceOf(await wallet.getAddress());
       await rakisToken.approve(
-        vaultRouter.address,
+        vaultRouterWrapper.address,
         ethers.utils.parseEther("100000000")
       );
-      await vaultRouter.removeLiquidity(
-        vault.address,
-        balanceArrakisV1Before,
-        0,
-        0,
-        await wallet.getAddress(),
-        false,
-        "0x0000000000000000000000000000000000000000"
-      );
+      const removeLiquidity = {
+        burnAmount: balanceArrakisV1Before,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        receiveETH: false,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
+      await vaultRouterWrapper.removeLiquidity(vault.address, removeLiquidity);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceArrakisV1After = await rakisToken.balanceOf(
@@ -307,18 +307,18 @@ describe("ArrakisV1 Staking Router tests", function () {
       const balance0Before = await token0.balanceOf(await wallet.getAddress());
       const balance1Before = await token1.balanceOf(await wallet.getAddress());
       await stRakisToken.approve(
-        vaultRouter.address,
+        vaultRouterWrapper.address,
         ethers.utils.parseEther("100000000")
       );
-      await vaultRouter.removeLiquidity(
-        vault.address,
-        balanceStakedBefore,
-        0,
-        0,
-        await wallet.getAddress(),
-        false,
-        gauge.address
-      );
+      const removeLiquidity = {
+        burnAmount: balanceStakedBefore,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        receiveETH: false,
+        gaugeAddress: gauge.address,
+      };
+      await vaultRouterWrapper.removeLiquidity(vault.address, removeLiquidity);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceStakedAfter = await stRakisToken.balanceOf(
@@ -415,15 +415,21 @@ describe("ArrakisV1 Staking Router tests", function () {
 
       // removeLiquidityETH
 
-      await rakisTokenW.approve(vaultRouter.address, balanceArrakisV1Before);
-      await vaultRouter.removeLiquidity(
+      await rakisTokenW.approve(
+        vaultRouterWrapper.address,
+        balanceArrakisV1Before
+      );
+      const removeLiquidity = {
+        burnAmount: balanceArrakisV1Before,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        receiveETH: true,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
+      await vaultRouterWrapper.removeLiquidity(
         arrakisWethVault.address,
-        balanceArrakisV1Before,
-        0,
-        0,
-        await wallet.getAddress(),
-        true,
-        "0x0000000000000000000000000000000000000000"
+        removeLiquidity
       );
       balance0After = await token0.balanceOf(await wallet.getAddress());
       balance1After = await wallet.provider?.getBalance(
@@ -595,15 +601,21 @@ describe("ArrakisV1 Staking Router tests", function () {
 
       // removeLiquidityETHAndUnstake
 
-      await stRakisToken.approve(vaultRouter.address, balanceStakedBefore);
-      await vaultRouter.removeLiquidity(
+      await stRakisToken.approve(
+        vaultRouterWrapper.address,
+        balanceStakedBefore
+      );
+      const removeLiquidity = {
+        burnAmount: balanceStakedBefore,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        receiveETH: true,
+        gaugeAddress: gauge.address,
+      };
+      await vaultRouterWrapper.removeLiquidity(
         arrakisWethVault.address,
-        balanceStakedBefore,
-        0,
-        0,
-        await wallet.getAddress(),
-        true,
-        gauge.address
+        removeLiquidity
       );
       balance0After = await token0W.balanceOf(await wallet.getAddress());
       balance1After = await wallet.provider?.getBalance(
