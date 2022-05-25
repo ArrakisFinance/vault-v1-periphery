@@ -4,26 +4,28 @@
 
 The functionalities of the old GUniRouter are now gonna be separated into 2 different contracts "**ArrakisV1RouterWrapper**" and "**ArrakisV1Router**" for security purposes explained in detail [here](https://dydx.exchange/blog/deposit-proxy-post-mortem).
 
-**ArrakisV1RouterWrapper** (aka wrapper contract) receives the approval from the users, validate input data, stake/unstake, wrap eth into weth and transfer funds from user to ArrakisV1Router. 
+**ArrakisV1RouterWrapper** (aka wrapper contract) receives the approval from the users, validate input data, stake/unstake, wrap eth into weth and transfer funds from user to ArrakisV1Router.
 
 **ArrakisV1Router** (aka router contract) is responsible for executing swap payloads (prepared off-chain) and interacting with vaults (ArrakisV1Vault).
 
 External functions in the router contract can only be called by the wrapper contract. For this, the wrapper has a function `updateRouter` to set the router address to be used. The router contract receives the wrapper address to validate on deployment (constructor).
 
 While doing this separation, some refactoring/optimizations were done on the functions previously available on GUniRouter:
+
 - Params were replaced by structs. Each defined struct serves a particular feature/purpose.
 
-- `addLiquidity` and `removeLiquidity` functions now can work with native ETH transfers (deprecating `addLiquidityETH` and `removeLiquidityETH`. 
+- `addLiquidity` and `removeLiquidity` functions now can work with native ETH transfers (deprecating `addLiquidityETH` and `removeLiquidityETH`.
 
 - `addLiquidity` and `removeLiquidity` functions now can stake/unstake to a gauge (deprecating `addLiquidityAndStake` and `removeLiquidityAndStake`).
--- When `gaugeAddress` is 0 => don't stake (or unstake)
--- When `gaugeAddress` is passed, we get the gauge on that address and retrieve its `staking_token()` to compare with the `IArrakisVaultV1 pool` address
+  -- When `gaugeAddress` is 0 => don't stake (or unstake)
+  -- When `gaugeAddress` is passed, we get the gauge on that address and retrieve its `staking_token()` to compare with the `IArrakisVaultV1 pool` address
 
 - `rebalanceAnd` functions of GUniV1Router were also updated the same way as mentioned above and renamed to `swapAndAddLiquidity`.
 
 ## Parameter structs
 
 - AddLiquidityData is used by `addLiquidity` function on both wrapper and router contracts.
+
 ```
 struct AddLiquidityData {
     // maximum amount of token0 to forward on mint
@@ -44,6 +46,7 @@ struct AddLiquidityData {
 ```
 
 - MintData is created by `ArrakisV1RouterWrapper.addLiquidity` and passed as parameter to `ArrakisV1Router.addLiquidity`.
+
 ```
 struct MintData {
     // amount of token0 to deposit
@@ -54,7 +57,9 @@ struct MintData {
     uint256 mintAmount;
 }
 ```
+
 - RemoveLiquidityData is used `removeLiquidity` function on both wrapper and router contracts.
+
 ```
 struct RemoveLiquidityData {
     // amount of LP tokens to burn
@@ -71,7 +76,9 @@ struct RemoveLiquidityData {
     address gaugeAddress;
 }
 ```
-- SwapData is used by `swapAndAddLiquidity` function 
+
+- SwapData is used by `swapAndAddLiquidity` function
+
 ```
 struct SwapData {
     // max amount being swapped
@@ -104,6 +111,7 @@ function addLiquidity(
         uint256 mintAmount
     );
 ```
+
 - if AddLiquidityData.useETH is true, this function will wrap ETH into WETH and send non-used ether back to the user.
 - if AddLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the pool address.
 
@@ -121,8 +129,9 @@ function removeLiquidity(
         uint128 liquidityBurned
     );
 ```
+
 - if RemoveLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the pool address, claim rewards for the user and unstake.
- 
+
 ## swapAndAddLiquidity
 
 ```
@@ -141,6 +150,7 @@ function swapAndAddLiquidity(
         uint256 amount1Diff
     );
 ```
+
 - if AddLiquidityData.useETH is true, this function will wrap ETH into WETH and send non-used ether back to the user.
 - if AddLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the pool address.
 - if the user is depositing 2 tokens and doing a swap => if token0 is being swapped for token1, AddLiquidityData.amount0Max should be the amount of token0 being deposited "normally" plus the amount to be swapped (SwapData.amountInSwap). (same applies for amount1Max on the inverse swap scenario)
@@ -150,6 +160,7 @@ function swapAndAddLiquidity(
 **Important:** Functions below can only be called by ArrakisV1RouterWrapper.
 
 ## addLiquidity
+
 ```
 function addLiquidity(
     IArrakisVaultV1 pool,
@@ -164,9 +175,11 @@ function addLiquidity(
         uint256 mintAmount
     )
 ```
+
 - if AddLiquidityData.gaugeAddress is filled, this function will stake the LP tokens in the gauge after depositing to the vault.
 
 ## removeLiquidity
+
 ```
 function removeLiquidity(
     IArrakisVaultV1 pool,
@@ -179,9 +192,11 @@ function removeLiquidity(
         uint128 liquidityBurned
     )
 ```
+
 - if RemoveLiquidityData.receiveETH is true, this function will unwrap WETH into ETH before transfering to the user.
 
 ## swapAndAddLiquidity
+
 ```
 function swapAndAddLiquidity(
     IArrakisVaultV1 pool,
@@ -199,9 +214,9 @@ function swapAndAddLiquidity(
         uint256 amount1Diff
     )
 ```
+
 - if AddLiquidityData.gaugeAddress is filled, this function will stake LP tokens in the gauge after deposit.
 - if AddLiquidityData.useETH is true, this function will send unused ETH back to the user.
-
 
 ### Updates for additional security on swaps:
 
