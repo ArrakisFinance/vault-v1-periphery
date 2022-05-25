@@ -230,7 +230,12 @@ contract ArrakisV1RouterWrapper is
             whitelist.verify(_swapData.swapRouter),
             "Swap router address not whitelisted!"
         );
-
+        if (_addData.gaugeAddress != address(0)) {
+            require(
+                address(pool) == IGauge(_addData.gaugeAddress).staking_token(),
+                "Incorrect gauge!"
+            );
+        }
         bool isToken0Weth;
         if (_addData.useETH) {
             isToken0Weth = _wrapAndTransferETH(
