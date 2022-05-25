@@ -188,15 +188,6 @@ contract ArrakisV1RouterStaking is
             uint256 amount1Diff
         )
     {
-        // amount0Max && amount1Max are already in this contract when this function is called.
-        // TODO: might need to add param "address sender" so we can send unused tokens back
-        if (_addData.gaugeAddress != address(0)) {
-            require(
-                address(pool) == IGauge(_addData.gaugeAddress).staking_token(),
-                "Incorrect gauge!"
-            );
-        }
-
         (amount0Diff, amount1Diff) = _swap(pool, _swapData);
 
         uint256 _mintAmount;
