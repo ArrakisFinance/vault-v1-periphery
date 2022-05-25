@@ -127,6 +127,7 @@ contract ArrakisV1RouterStaking is
     )
         external
         override
+        onlyRouterWrapper
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -353,6 +354,18 @@ contract ArrakisV1RouterStaking is
 
         uint256 balance0Before = _pool.token0().balanceOf(address(this));
         uint256 balance1Before = _pool.token1().balanceOf(address(this));
+
+        if (_swapData.zeroForOne) {
+            IERC20(_pool.token0()).safeApprove(
+                _swapData.swapRouter,
+                _swapData.amountInSwap
+            );
+        } else {
+            IERC20(_pool.token1()).safeApprove(
+                _swapData.swapRouter,
+                _swapData.amountInSwap
+            );
+        }
 
         (bool success, bytes memory returnsData) =
             _swapData.swapRouter.call(_swapData.swapPayload[0]);
