@@ -31,6 +31,21 @@ struct MintData {
     uint256 mintAmount;
 }
 
+struct RemoveLiquidityData {
+    // amount of LP tokens to burn
+    uint256 burnAmount;
+    // minimum amount of token0 to receive
+    uint256 amount0Min;
+    // minimum amount of token1 to receive
+    uint256 amount1Min;
+    // address to receive underlying tokens
+    address payable receiver;
+    // bool indicating if user wants to receive in native ETH
+    bool receiveETH;
+    // address of gauge to unstake from
+    address gaugeAddress;
+}
+
 struct SwapData {
     // max amount being swapped
     uint256 amountInSwap;
@@ -60,12 +75,7 @@ interface IArrakisV1RouterStaking {
 
     function removeLiquidity(
         IArrakisVaultV1 pool,
-        uint256 burnAmount,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        address payable receiver,
-        bool receiveETH,
-        address gaugeAddress
+        RemoveLiquidityData memory _removeData
     )
         external
         returns (
@@ -77,13 +87,16 @@ interface IArrakisV1RouterStaking {
     function swapAndAddLiquidity(
         IArrakisVaultV1 pool,
         AddLiquidityData memory _addData,
-        SwapData memory _swapData
+        SwapData memory _swapData,
+        address payable userToRefund
     )
         external
         payable
         returns (
             uint256 amount0,
             uint256 amount1,
-            uint256 mintAmount
+            uint256 mintAmount,
+            uint256 amount0Diff,
+            uint256 amount1Diff
         );
 }
