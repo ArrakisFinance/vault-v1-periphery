@@ -55,6 +55,6 @@ contract ArrakisSwappersWhitelist is
         override
         returns (bool whitelisted)
     {
-        return whitelist[router];
+        return (whitelist[router]);
     }
 }
