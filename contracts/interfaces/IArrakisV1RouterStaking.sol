@@ -56,7 +56,7 @@ struct SwapData {
     // address for swap calls
     address swapRouter;
     // payload for swap call
-    bytes[] swapPayload;
+    bytes swapPayload;
 }
 
 interface IArrakisV1RouterStaking {

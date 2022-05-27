@@ -223,10 +223,6 @@ contract ArrakisV1RouterWrapper is
         )
     {
         require(
-            _swapData.swapPayload.length == 1,
-            "Only 1 swap transaction allowed!"
-        );
-        require(
             whitelist.verify(_swapData.swapRouter),
             "Swap router address not whitelisted!"
         );
