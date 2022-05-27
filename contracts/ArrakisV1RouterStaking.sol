@@ -27,6 +27,7 @@ import {
     OwnableUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {GelatoBytes} from "./vendor/gelato/GelatoBytes.sol";
+import "hardhat/console.sol";
 
 contract ArrakisV1RouterStaking is
     IArrakisV1RouterStaking,
@@ -191,15 +192,23 @@ contract ArrakisV1RouterStaking is
         (amount0Diff, amount1Diff) = _swap(pool, _swapData);
 
         uint256 _mintAmount;
-        (amount0, amount1, _mintAmount) = pool.getMintAmounts(
+        uint256 amount0Use =
             (_swapData.zeroForOne)
                 ? _addData.amount0Max - amount0Diff
-                : _addData.amount0Max + amount0Diff,
+                : _addData.amount0Max + amount0Diff;
+        uint256 amount1Use =
             (_swapData.zeroForOne)
                 ? _addData.amount1Max + amount1Diff
-                : _addData.amount1Max - amount1Diff
+                : _addData.amount1Max - amount1Diff;
+        console.log("amount0Use: %s", amount0Use);
+        console.log("amount1Use: %s", amount1Use);
+        (amount0, amount1, _mintAmount) = pool.getMintAmounts(
+            amount0Use,
+            amount1Use
         );
 
+        console.log("swapAndAdd - before deposit -  amount0: %s", amount0);
+        console.log("swapAndAdd - before deposit - amount1: %s", amount1);
         require(
             amount0 >= _addData.amount0Min && amount1 >= _addData.amount1Min,
             "below min amounts"
@@ -231,7 +240,8 @@ contract ArrakisV1RouterStaking is
                 _addData.receiver
             );
         }
-
+        console.log("swapAndAdd - after deposit -  amount0: %s", amount0);
+        console.log("swapAndAdd - after deposit - amount1: %s", amount1);
         // now we send leftovers to user.
         // if we can send leftovers in WETH, this logic would be much simpler
         bool isToken0Weth;
@@ -248,21 +258,31 @@ contract ArrakisV1RouterStaking is
         }
 
         if (
-            _addData.amount0Max > amount0 &&
+            amount0Use > amount0 &&
             (!_addData.useETH || (_addData.useETH && !isToken0Weth))
         ) {
+            console.log("swapAndAdd - refund0: %s", amount0Use - amount0);
+            console.log(
+                "swapAndAdd - balance0: %s",
+                IERC20(pool.token0()).balanceOf(address(this))
+            );
             IERC20(pool.token0()).safeTransfer(
                 userToRefund,
-                _addData.amount0Max - amount0
+                amount0Use - amount0
             );
         }
         if (
-            _addData.amount1Max > amount1 &&
+            amount1Use > amount1 &&
             (!_addData.useETH || (_addData.useETH && isToken0Weth))
         ) {
+            console.log("swapAndAdd - refund1: %s", amount1Use - amount1);
+            console.log(
+                "swapAndAdd - balance1: %s",
+                IERC20(pool.token1()).balanceOf(address(this))
+            );
             IERC20(pool.token1()).safeTransfer(
                 userToRefund,
-                _addData.amount1Max - amount1
+                amount1Use - amount1
             );
         }
     }
@@ -338,14 +358,10 @@ contract ArrakisV1RouterStaking is
         internal
         returns (uint256 amount0Diff, uint256 amount1Diff)
     {
-        require(
-            _swapData.swapPayload.length == 1,
-            "only 1 swap transaction allowed"
-        );
-
         uint256 balance0Before = _pool.token0().balanceOf(address(this));
         uint256 balance1Before = _pool.token1().balanceOf(address(this));
-
+        console.log("swap - balance0Before: %s", balance0Before);
+        console.log("swap - balance1Before: %s", balance1Before);
         if (_swapData.zeroForOne) {
             IERC20(_pool.token0()).safeIncreaseAllowance(
                 _swapData.swapRouter,
@@ -359,7 +375,7 @@ contract ArrakisV1RouterStaking is
         }
 
         (bool success, bytes memory returnsData) =
-            _swapData.swapRouter.call(_swapData.swapPayload[0]);
+            _swapData.swapRouter.call(_swapData.swapPayload);
         if (!success) GelatoBytes.revertWithError(returnsData, "swap: ");
 
         // setting allowance to 0
@@ -383,9 +399,13 @@ contract ArrakisV1RouterStaking is
 
         uint256 balance0 = _pool.token0().balanceOf(address(this));
         uint256 balance1 = _pool.token1().balanceOf(address(this));
+        console.log("swap - balance0: %s", balance0);
+        console.log("swap - balance1: %s", balance1);
         if (_swapData.zeroForOne) {
             amount0Diff = balance0Before - balance0;
             amount1Diff = balance1 - balance1Before;
+            console.log("swap - zeroForOne - amount0Diff: %s", amount0Diff);
+            console.log("swap - zeroForOne - amount1Diff: %s", amount1Diff);
             require(
                 balance0Before > balance0 && balance1 > balance1Before,
                 "Token0 swap failed!"
@@ -397,6 +417,8 @@ contract ArrakisV1RouterStaking is
         } else {
             amount0Diff = balance0 - balance0Before;
             amount1Diff = balance1Before - balance1;
+            console.log("swap - !zeroForOne - amount0Diff: %s", amount0Diff);
+            console.log("swap - !zeroForOne - amount1Diff: %s", amount1Diff);
             require(
                 balance0 > balance0Before && balance1Before > balance1,
                 "Token1 swap failed!"

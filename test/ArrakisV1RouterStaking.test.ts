@@ -2,9 +2,11 @@ import { expect } from "chai";
 import { deployments, ethers, network } from "hardhat";
 import { IERC20, ArrakisV1RouterStaking, IArrakisVaultV1 } from "../typechain";
 import { ArrakisV1RouterWrapper } from "../typechain/ArrakisV1RouterWrapper";
-// import { ArrakisSwappersWhitelist } from "../typechain/ArrakisSwappersWhitelist";
+import { ArrakisSwappersWhitelist } from "../typechain/ArrakisSwappersWhitelist";
+import { ArrakisV1Resolver } from "../typechain/ArrakisV1Resolver";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import { Addresses, getAddresses } from "../src/addresses";
+import { swapTokenData, quote1Inch } from "../src/oneInchApiIntegration";
 import Gauge from "../src/LiquidityGaugeV4.json";
 import { BigNumber, Contract } from "ethers";
 
@@ -26,7 +28,8 @@ describe("ArrakisV1 Staking Router tests", function () {
   let vault: IArrakisVaultV1;
   let vaultRouterWrapper: ArrakisV1RouterWrapper;
   let vaultRouter: ArrakisV1RouterStaking;
-  // let swappersWhitelist: ArrakisSwappersWhitelist;
+  let swappersWhitelist: ArrakisSwappersWhitelist;
+  let resolver: ArrakisV1Resolver;
   let gauge: Contract;
   let contractBalanceEth: BigNumber | undefined;
   before(async function () {
@@ -51,6 +54,7 @@ describe("ArrakisV1 Staking Router tests", function () {
     const deployers = await arrakisFactory.getDeployers();
     const pools = await arrakisFactory.getPools(deployers[0]);
     const poolAddress = pools[0];
+    console.log("poolAddress: ", poolAddress);
     vault = (await ethers.getContractAt(
       "IArrakisVaultV1",
       poolAddress
@@ -65,16 +69,16 @@ describe("ArrakisV1 Staking Router tests", function () {
     )) as IERC20;
     rakisToken = (await ethers.getContractAt("IERC20", poolAddress)) as IERC20;
 
-    // const swappersWhitelistAddress = (
-    //   await deployments.get("ArrakisSwappersWhitelist")
-    // ).address;
+    const swappersWhitelistAddress = (
+      await deployments.get("ArrakisSwappersWhitelist")
+    ).address;
 
-    // swappersWhitelist = (await ethers.getContractAt(
-    //   "ArrakisSwappersWhitelist",
-    //   swappersWhitelistAddress
-    // )) as ArrakisSwappersWhitelist;
+    swappersWhitelist = (await ethers.getContractAt(
+      "ArrakisSwappersWhitelist",
+      swappersWhitelistAddress
+    )) as ArrakisSwappersWhitelist;
 
-    // await swappersWhitelist.addToWhitelist(addresses.OneInchRouter);
+    await swappersWhitelist.addToWhitelist(addresses.OneInchRouter);
 
     const vaultRouterAddress = (await deployments.get("ArrakisV1RouterStaking"))
       .address;
@@ -94,6 +98,13 @@ describe("ArrakisV1 Staking Router tests", function () {
     )) as ArrakisV1RouterWrapper;
 
     await vaultRouterWrapper.updateRouter(vaultRouter.address);
+
+    const resolverAddress = (await deployments.get("ArrakisV1Resolver"))
+      .address;
+    resolver = (await ethers.getContractAt(
+      "ArrakisV1Resolver",
+      resolverAddress
+    )) as ArrakisV1Resolver;
 
     await network.provider.request({
       method: "hardhat_impersonateAccount",
@@ -650,6 +661,232 @@ describe("ArrakisV1 Staking Router tests", function () {
       expect(contractBalance2).to.equal(ethers.constants.Zero);
       expect(contractBalance3).to.equal(ethers.constants.Zero);
       expect(contractBalanceEth).to.equal(contractBalanceEthEnd);
+    });
+  });
+  describe("swaps", function () {
+    it("should swap and deposit funds", async function () {
+      // token0 is DAI
+      const spendAmountDAI = ethers.utils.parseUnits("100000", "18");
+      const spendAmountUSDC = ethers.utils.parseUnits("100000", "6");
+      console.log("spendAmountDAI: ", spendAmountDAI?.toString());
+      console.log("spendAmountUSDC: ", spendAmountUSDC?.toString());
+
+      await token0
+        .connect(wallet)
+        .approve(vaultRouterWrapper.address, spendAmountDAI);
+      await token1
+        .connect(wallet)
+        .approve(vaultRouterWrapper.address, spendAmountUSDC);
+
+      const balance0Before = await token0.balanceOf(await wallet.getAddress());
+      const balance1Before = await token1.balanceOf(await wallet.getAddress());
+      const balanceRakisBefore = await rakisToken.balanceOf(
+        await wallet.getAddress()
+      );
+
+      const [amount0Current, amount1Current] =
+        await vault.getUnderlyingBalances();
+      console.log("amount0Current: ", amount0Current?.toString());
+      console.log("amount1Current: ", amount1Current?.toString());
+
+      // amount here is not so important, as what we want is an initial price for this asset pair
+      const quoteAmount = await quote1Inch(
+        "1",
+        addresses.USDC,
+        addresses.DAI,
+        spendAmountUSDC.toString()
+      );
+      console.log("quoteAmount: ", quoteAmount);
+
+      const denominator = ethers.BigNumber.from(quoteAmount).mul(
+        ethers.BigNumber.from((10 ** 6).toString())
+      );
+      const numerator = ethers.BigNumber.from(spendAmountDAI.toString()).mul(
+        ethers.utils.parseEther("1")
+      );
+      const priceX18 = numerator
+        .mul(ethers.utils.parseEther("1"))
+        .div(denominator);
+      console.log("price check:", priceX18.toString());
+
+      // given this price and the amounts the user is willing to spend
+      // which token should be swapped and how much
+      const result = await resolver.getRebalanceParams(
+        vault.address,
+        spendAmountDAI,
+        spendAmountUSDC,
+        priceX18
+      );
+      console.log(
+        "getRebalanceParams - result.swapAmount.toString(): ",
+        result.swapAmount.toString()
+      );
+      expect(result.zeroForOne).to.be.false; // this pool has 4.5x more DAI than USDC
+
+      // now that we know how much to swap, let's check what's the price that we get
+      const quoteAmount2 = await quote1Inch(
+        "1",
+        addresses.USDC,
+        addresses.DAI,
+        result.swapAmount.toString()
+      );
+      console.log("quoteAmount2:", quoteAmount2);
+      const denominator2 = ethers.BigNumber.from(quoteAmount2).mul(
+        ethers.BigNumber.from((10 ** 6).toString())
+      );
+      const numerator2 = result.swapAmount.mul(ethers.utils.parseEther("1"));
+      const price2 = numerator2
+        .mul(ethers.utils.parseEther("1"))
+        .div(denominator2);
+      console.log("price2 check:", price2.toString());
+
+      // given the new price, does the swap amount changes?
+      const result2 = await resolver.getRebalanceParams(
+        vault.address,
+        spendAmountDAI,
+        spendAmountUSDC.toString(),
+        price2
+      );
+      expect(result2.zeroForOne).to.be.false;
+      console.log(
+        "getRebalanceParams - result2.swapAmount.toString():",
+        result2.swapAmount.toString()
+      );
+      const quoteAmount3 = await quote1Inch(
+        "1",
+        addresses.USDC,
+        addresses.DAI,
+        result2.swapAmount.toString()
+      );
+      console.log("quoteAmount3:", quoteAmount3);
+
+      const denominator3 = ethers.BigNumber.from(quoteAmount3).mul(
+        ethers.BigNumber.from((10 ** 6).toString())
+      );
+      const numerator3 = result.swapAmount.mul(ethers.utils.parseEther("1"));
+      const price3 = numerator3
+        .mul(ethers.utils.parseEther("1"))
+        .div(denominator3);
+      console.log("price3 check:", price3.toString());
+
+      // given the new price, does the swap amount changes?
+      const result3 = await resolver.getRebalanceParams(
+        vault.address,
+        spendAmountDAI,
+        spendAmountUSDC.toString(),
+        price3
+      );
+      console.log(
+        "getRebalanceParams - result3.swapAmount.toString():",
+        result3.swapAmount.toString()
+      );
+      const amountDAIUse = spendAmountDAI.add(
+        ethers.BigNumber.from(quoteAmount3)
+      );
+      const amountUSDCUse = spendAmountUSDC.sub(result2.swapAmount);
+      console.log("amountDAIUse.toString(): ", amountDAIUse.toString());
+      console.log("amountUSDCUse.toString() ", amountUSDCUse.toString());
+      const mintAmounts = await vault.getMintAmounts(
+        amountDAIUse,
+        amountUSDCUse
+      );
+      console.log(
+        "mintAmounts.amount0.toString() ",
+        mintAmounts.amount0.toString()
+      );
+      console.log(
+        "mintAmounts.amount1.toString() ",
+        mintAmounts.amount1.toString()
+      );
+      console.log(
+        "mintAmounts.mintAmount.toString() ",
+        mintAmounts.mintAmount.toString()
+      );
+
+      const swapParams = await swapTokenData(
+        "1",
+        addresses.USDC,
+        addresses.DAI,
+        result2.swapAmount.toString(),
+        vaultRouter.address,
+        "10"
+      );
+
+      const addData = {
+        amount0Max: spendAmountDAI,
+        amount1Max: spendAmountUSDC,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        useETH: false,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
+
+      const amountOut = ethers.BigNumber.from(quoteAmount3)
+        .mul(ethers.BigNumber.from((9).toString()))
+        .div(ethers.BigNumber.from((10).toString())); // -10% (slippage protection)
+      console.log("amountOut: ", amountOut); // 70740,9
+
+      const swapData = {
+        amountInSwap: result2.swapAmount.toString(),
+        amountOutSwap: amountOut,
+        zeroForOne: result2.zeroForOne,
+        swapRouter: swapParams.to,
+        swapPayload: swapParams.data,
+      };
+
+      await vaultRouterWrapper.swapAndAddLiquidity(
+        vault.address,
+        addData,
+        swapData
+      );
+
+      const balance0After = await token0.balanceOf(await wallet.getAddress());
+      const balance1After = await token1.balanceOf(await wallet.getAddress());
+      const balanceRakisAfter = await rakisToken.balanceOf(
+        await wallet.getAddress()
+      );
+
+      expect(balance0Before).to.be.gt(balance0After);
+      expect(balance1Before).to.be.gt(balance1After);
+      expect(balanceRakisBefore).to.be.lt(balanceRakisAfter);
+
+      console.log(
+        "DAI input:",
+        ethers.utils.formatUnits(balance0Before.sub(balance0After), "18")
+      );
+      console.log(
+        "USDC input:",
+        ethers.utils.formatUnits(balance1Before.sub(balance1After), "6")
+      );
+      console.log(
+        "RAKIS minted:",
+        balanceRakisBefore.sub(balanceRakisAfter).toString()
+      );
+
+      const routerBalance0 = await token0.balanceOf(vaultRouter.address);
+      const routerBalance1 = await token1.balanceOf(vaultRouter.address);
+      const routerBalanceRakis = await rakisToken.balanceOf(
+        vaultRouter.address
+      );
+
+      expect(routerBalance0).to.equal(ethers.constants.Zero);
+      expect(routerBalance1).to.equal(ethers.constants.Zero);
+      expect(routerBalanceRakis).to.equal(ethers.constants.Zero);
+
+      const wrapperBalance0 = await token0.balanceOf(
+        vaultRouterWrapper.address
+      );
+      const wrapperBalance1 = await token1.balanceOf(
+        vaultRouterWrapper.address
+      );
+      const wrapperBalanceRakis = await rakisToken.balanceOf(
+        vaultRouterWrapper.address
+      );
+
+      expect(wrapperBalance0).to.equal(ethers.constants.Zero);
+      expect(wrapperBalance1).to.equal(ethers.constants.Zero);
+      expect(wrapperBalanceRakis).to.equal(ethers.constants.Zero);
     });
   });
 });

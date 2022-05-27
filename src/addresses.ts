@@ -9,6 +9,8 @@ export interface Addresses {
   ArrakisDevMultiSig: string;
   ArrakisV1WethPool: string;
   OneInchRouter: string;
+  DAI: string;
+  USDC: string;
 }
 
 export const getAddresses = (network: string): Addresses => {
@@ -24,6 +26,8 @@ export const getAddresses = (network: string): Addresses => {
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "0xa6c49FD13E50a30C65E6C8480aADA132011D0613",
         OneInchRouter: "0x1111111254fb6c44bac0bed2854e76f90643097d",
+        DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       };
     case "mainnet":
       return {
@@ -36,6 +40,8 @@ export const getAddresses = (network: string): Addresses => {
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "0xa6c49FD13E50a30C65E6C8480aADA132011D0613",
         OneInchRouter: "0x1111111254fb6c44bac0bed2854e76f90643097d",
+        DAI: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       };
     case "goerli":
       return {
@@ -48,6 +54,8 @@ export const getAddresses = (network: string): Addresses => {
         ArrakisDevMultiSig: "0xAabB54394E8dd61Dd70897E9c80be8de7C64A895",
         ArrakisV1WethPool: "",
         OneInchRouter: "",
+        DAI: "",
+        USDC: "",
       };
     case "polygon":
       return {
@@ -60,6 +68,8 @@ export const getAddresses = (network: string): Addresses => {
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "",
         OneInchRouter: "",
+        DAI: "",
+        USDC: "",
       };
     case "optimism":
       return {
@@ -72,6 +82,8 @@ export const getAddresses = (network: string): Addresses => {
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "",
         OneInchRouter: "",
+        DAI: "",
+        USDC: "",
       };
     default:
       throw new Error(`No addresses for Network: ${network}`);
