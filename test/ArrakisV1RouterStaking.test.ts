@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import { deployments, ethers, network } from "hardhat";
-import { IERC20, ArrakisV1RouterStaking, IArrakisVaultV1 } from "../typechain";
+import { IERC20, IArrakisVaultV1 } from "../typechain";
+import { ArrakisV1RouterStaking } from "../typechain/ArrakisV1RouterStaking";
 import { ArrakisV1RouterWrapper } from "../typechain/ArrakisV1RouterWrapper";
 import { ArrakisSwappersWhitelist } from "../typechain/ArrakisSwappersWhitelist";
 import { ArrakisV1Resolver } from "../typechain/ArrakisV1Resolver";
@@ -701,7 +702,7 @@ describe("ArrakisV1 Staking Router tests", function () {
       const denominator = ethers.BigNumber.from(quoteAmount).mul(
         ethers.BigNumber.from((10 ** 6).toString())
       );
-      const numerator = ethers.BigNumber.from(spendAmountDAI.toString()).mul(
+      const numerator = ethers.BigNumber.from(spendAmountUSDC).mul(
         ethers.utils.parseEther("1")
       );
       const priceX18 = numerator
@@ -723,7 +724,7 @@ describe("ArrakisV1 Staking Router tests", function () {
       );
       expect(result.zeroForOne).to.be.false; // this pool has 4.5x more DAI than USDC
 
-      // now that we know how much to swap, let's check what's the price that we get
+      // now that we know how much to swap, let's get a new quote
       const quoteAmount2 = await quote1Inch(
         "1",
         addresses.USDC,
@@ -740,11 +741,11 @@ describe("ArrakisV1 Staking Router tests", function () {
         .div(denominator2);
       console.log("price2 check:", price2.toString());
 
-      // given the new price, does the swap amount changes?
+      // given the new price, let's get a new swap amount and see if it changes
       const result2 = await resolver.getRebalanceParams(
         vault.address,
         spendAmountDAI,
-        spendAmountUSDC.toString(),
+        spendAmountUSDC,
         price2
       );
       expect(result2.zeroForOne).to.be.false;
@@ -752,6 +753,8 @@ describe("ArrakisV1 Staking Router tests", function () {
         "getRebalanceParams - result2.swapAmount.toString():",
         result2.swapAmount.toString()
       );
+
+      // given this new swapAmount, how much of the other token will I receive?
       const quoteAmount3 = await quote1Inch(
         "1",
         addresses.USDC,
@@ -760,26 +763,6 @@ describe("ArrakisV1 Staking Router tests", function () {
       );
       console.log("quoteAmount3:", quoteAmount3);
 
-      const denominator3 = ethers.BigNumber.from(quoteAmount3).mul(
-        ethers.BigNumber.from((10 ** 6).toString())
-      );
-      const numerator3 = result.swapAmount.mul(ethers.utils.parseEther("1"));
-      const price3 = numerator3
-        .mul(ethers.utils.parseEther("1"))
-        .div(denominator3);
-      console.log("price3 check:", price3.toString());
-
-      // given the new price, does the swap amount changes?
-      const result3 = await resolver.getRebalanceParams(
-        vault.address,
-        spendAmountDAI,
-        spendAmountUSDC.toString(),
-        price3
-      );
-      console.log(
-        "getRebalanceParams - result3.swapAmount.toString():",
-        result3.swapAmount.toString()
-      );
       const amountDAIUse = spendAmountDAI.add(
         ethers.BigNumber.from(quoteAmount3)
       );
@@ -809,7 +792,7 @@ describe("ArrakisV1 Staking Router tests", function () {
         addresses.DAI,
         result2.swapAmount.toString(),
         vaultRouter.address,
-        "10"
+        "5"
       );
 
       const addData = {
@@ -823,9 +806,9 @@ describe("ArrakisV1 Staking Router tests", function () {
       };
 
       const amountOut = ethers.BigNumber.from(quoteAmount3)
-        .mul(ethers.BigNumber.from((9).toString()))
-        .div(ethers.BigNumber.from((10).toString())); // -10% (slippage protection)
-      console.log("amountOut: ", amountOut); // 70740,9
+        .mul(ethers.BigNumber.from((95).toString()))
+        .div(ethers.BigNumber.from((100).toString())); // -5% (slippage protection)
+      console.log("amountOut.toString(): ", amountOut.toString());
 
       const swapData = {
         amountInSwap: result2.swapAmount.toString(),
@@ -835,11 +818,66 @@ describe("ArrakisV1 Staking Router tests", function () {
         swapPayload: swapParams.data,
       };
 
-      await vaultRouterWrapper.swapAndAddLiquidity(
+      // flag indicating if "Swapped" event fired
+      let hasSwapped = false;
+      // flag indicating if "Minted" event fired
+      let hasMinted = false;
+
+      // object to be filled with "Swapped" event data
+      const swapppedEventData = {
+        zeroForOne: false,
+        amount0Diff: ethers.BigNumber.from(0),
+        amount1Diff: ethers.BigNumber.from(0),
+      };
+      // object to be filled with "Minted" event data
+      const mintedEventData = {
+        receiver: "",
+        mintAmount: ethers.BigNumber.from(0),
+        amount0In: ethers.BigNumber.from(0),
+        amount1In: ethers.BigNumber.from(0),
+        liquidityMinted: ethers.BigNumber.from(0),
+      };
+
+      // listener for getting data from "Swapped" event
+      vaultRouter.on("Swapped", (zeroForOne, amount0Diff, amount1Diff) => {
+        console.log("swapped!");
+        swapppedEventData.zeroForOne = zeroForOne;
+        swapppedEventData.amount0Diff = ethers.BigNumber.from(amount0Diff);
+        swapppedEventData.amount1Diff = ethers.BigNumber.from(amount1Diff);
+        hasSwapped = true;
+      });
+      // listener for getting data from "Minted" event
+      vault.on(
+        "Minted",
+        (receiver, mintAmount, amount0In, amount1In, liquidityMinted) => {
+          console.log("minted!");
+          mintedEventData.receiver = receiver;
+          mintedEventData.mintAmount = ethers.BigNumber.from(mintAmount);
+          mintedEventData.amount0In = ethers.BigNumber.from(amount0In);
+          mintedEventData.amount1In = ethers.BigNumber.from(amount1In);
+          mintedEventData.liquidityMinted =
+            ethers.BigNumber.from(liquidityMinted);
+          hasMinted = true;
+        }
+      );
+      // function that returns a promise that resolves when "Swapped" and "Minted" are fired
+      const getEventsData = async () => {
+        return new Promise<void>((resolve) => {
+          const interval = setInterval(() => {
+            if (hasSwapped && hasMinted) {
+              clearInterval(interval);
+              resolve();
+            }
+          }, 5000);
+        });
+      };
+
+      const swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
         vault.address,
         addData,
         swapData
       );
+      await swapAndAddTxPending.wait();
 
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
@@ -887,6 +925,53 @@ describe("ArrakisV1 Staking Router tests", function () {
       expect(wrapperBalance0).to.equal(ethers.constants.Zero);
       expect(wrapperBalance1).to.equal(ethers.constants.Zero);
       expect(wrapperBalanceRakis).to.equal(ethers.constants.Zero);
+
+      await getEventsData();
+      console.log("swapped! zeroForOne: ", swapppedEventData.zeroForOne);
+      console.log(
+        "swapped amount0Diff: ",
+        swapppedEventData.amount0Diff.toString()
+      );
+      console.log(
+        "swapped amount1Diff: ",
+        swapppedEventData.amount1Diff.toString()
+      );
+      console.log("minted! receiver: ", mintedEventData.receiver);
+      console.log(
+        "mintedEventData mintAmount: ",
+        mintedEventData.mintAmount.toString()
+      );
+      console.log(
+        "mintedEventData amount0In: ",
+        mintedEventData.amount0In.toString()
+      );
+      console.log(
+        "mintedEventData amount1In: ",
+        mintedEventData.amount1In.toString()
+      );
+      // now that we have "Swapped" and "Minted" data, let's validate balance/refunds
+      let amount0Use = ethers.BigNumber.from(0);
+      let amount1Use = ethers.BigNumber.from(0);
+      if (swapppedEventData.zeroForOne) {
+        amount0Use = addData.amount0Max.sub(swapppedEventData.amount0Diff);
+        amount1Use = addData.amount1Max.add(swapppedEventData.amount1Diff);
+
+        // validating amountOut
+        expect(amountOut).to.be.lt(swapppedEventData.amount1Diff);
+      } else {
+        amount0Use = addData.amount0Max.add(swapppedEventData.amount0Diff);
+        amount1Use = addData.amount1Max.sub(swapppedEventData.amount1Diff);
+
+        expect(amountOut).to.be.lt(swapppedEventData.amount0Diff);
+      }
+      const refund0 = amount0Use.sub(mintedEventData.amount0In);
+      const refund1 = amount1Use.sub(mintedEventData.amount1In);
+      expect(balance0After).to.equal(
+        balance0Before.sub(addData.amount0Max).add(refund0)
+      );
+      expect(balance1After).to.equal(
+        balance1Before.sub(addData.amount1Max).add(refund1)
+      );
     });
   });
 });
