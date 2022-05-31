@@ -41,6 +41,8 @@ contract ArrakisV1RouterStaking is
     IWETH public immutable weth;
     address public immutable routerWrapperAddress;
 
+    event Swapped(bool zeroForOne, uint256 amount0Diff, uint256 amount1Diff);
+
     modifier onlyRouterWrapper() {
         require(msg.sender == routerWrapperAddress, "onlyRouterWrapper");
         _;
@@ -428,6 +430,8 @@ contract ArrakisV1RouterStaking is
                 "Minimum amount of token1 not retrieved on swap!"
             );
         }
+
+        emit Swapped(_swapData.zeroForOne, amount0Diff, amount1Diff);
     }
 
     function _isToken0Weth(address token0, address token1)

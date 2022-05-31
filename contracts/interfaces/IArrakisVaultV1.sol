@@ -8,6 +8,14 @@ import {
 } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 interface IArrakisVaultV1 {
+    event Minted(
+        address receiver,
+        uint256 mintAmount,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint128 liquidityMinted
+    );
+
     function mint(uint256 mintAmount, address receiver)
         external
         returns (
