@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import { deployments, ethers, network } from "hardhat";
 import { IERC20, IArrakisVaultV1 } from "../typechain";
+import { ERC20 } from "../typechain/ERC20";
 import { ArrakisV1RouterStaking } from "../typechain/ArrakisV1RouterStaking";
 import { ArrakisV1RouterWrapper } from "../typechain/ArrakisV1RouterWrapper";
 import { ArrakisSwappersWhitelist } from "../typechain/ArrakisSwappersWhitelist";
@@ -22,10 +23,10 @@ const WAD = ethers.BigNumber.from("10").pow("18");
 describe("ArrakisV1 Staking Router tests", function () {
   this.timeout(0);
   let wallet: SignerWithAddress;
-  let token0: IERC20;
-  let token1: IERC20;
-  let rakisToken: IERC20;
-  let stRakisToken: IERC20;
+  let token0: ERC20;
+  let token1: ERC20;
+  let rakisToken: ERC20;
+  let stRakisToken: ERC20;
   let vault: IArrakisVaultV1;
   let vaultRouterWrapper: ArrakisV1RouterWrapper;
   let vaultRouter: ArrakisV1RouterStaking;
@@ -33,6 +34,344 @@ describe("ArrakisV1 Staking Router tests", function () {
   let resolver: ArrakisV1Resolver;
   let gauge: Contract;
   let contractBalanceEth: BigNumber | undefined;
+
+  const swapAndAddTest = async (
+    vault: IArrakisVaultV1,
+    token0: ERC20,
+    token1: ERC20,
+    amount0Max: BigNumber,
+    amount1Max: BigNumber,
+    zeroForOne: boolean
+  ) => {
+    // console.log("validatePool");
+    // console.log("amount0Max: ", amount0Max?.toString());
+    // console.log("amount1Max: ", amount1Max?.toString());
+    const decimalsToken0 = await token0.decimals();
+    const decimalsToken1 = await token1.decimals();
+    // console.log("decimalsToken0: ", decimalsToken0);
+    // console.log("decimalsToken1: ", decimalsToken1);
+    amount0Max = ethers.utils.parseUnits(amount0Max.toString(), decimalsToken0);
+    amount1Max = ethers.utils.parseUnits(amount1Max.toString(), decimalsToken1);
+    // console.log("amount0Max: ", amount0Max?.toString());
+    // console.log("amount1Max: ", amount1Max?.toString());
+
+    let amount0Use: BigNumber;
+    let amount1Use: BigNumber;
+
+    if (amount0Max.gt(0)) {
+      await token0
+        .connect(wallet)
+        .approve(vaultRouterWrapper.address, amount0Max);
+    }
+    if (amount1Max.gt(0)) {
+      await token1
+        .connect(wallet)
+        .approve(vaultRouterWrapper.address, amount1Max);
+    }
+
+    const balance0Before = await token0.balanceOf(await wallet.getAddress());
+    const balance1Before = await token1.balanceOf(await wallet.getAddress());
+    const balanceRakisBefore = await rakisToken.balanceOf(
+      await wallet.getAddress()
+    );
+
+    // const [amount0Current, amount1Current] =
+    //   await vault.getUnderlyingBalances();
+    // console.log("amount0Current: ", amount0Current?.toString());
+    // console.log("amount1Current: ", amount1Current?.toString());
+
+    // amount here is not so important, as what we want is an initial price for this asset pair
+    // console.log("token1.address: ", token1.address);
+    const quoteAmount = await quote1Inch(
+      "1",
+      zeroForOne ? token0.address : token1.address,
+      zeroForOne ? token1.address : token0.address,
+      zeroForOne ? amount0Max.toString() : amount1Max.toString()
+    );
+    // console.log("quoteAmount: ", quoteAmount);
+
+    const numerator = ethers.BigNumber.from(quoteAmount).mul(
+      zeroForOne
+        ? ethers.BigNumber.from((10 ** decimalsToken0).toString())
+        : ethers.BigNumber.from((10 ** decimalsToken1).toString())
+    );
+    const denominator = zeroForOne
+      ? amount0Max.mul(ethers.BigNumber.from((10 ** decimalsToken1).toString()))
+      : amount1Max.mul(
+          ethers.BigNumber.from((10 ** decimalsToken0).toString())
+        );
+    const priceX18 = numerator
+      .mul(ethers.utils.parseEther("1"))
+      .div(denominator);
+    // console.log("price check:", priceX18.toString());
+
+    // given this price and the amounts the user is willing to spend
+    // which token should be swapped and how much
+    const result = await resolver.getRebalanceParams(
+      vault.address,
+      amount0Max,
+      amount1Max,
+      priceX18
+    );
+    // console.log(
+    //   "getRebalanceParams - result.swapAmount.toString(): ",
+    //   result.swapAmount.toString()
+    // );
+    expect(result.zeroForOne).to.be.equals(zeroForOne);
+
+    // now that we know how much to swap, let's get a new quote
+    const quoteAmount2 = await quote1Inch(
+      "1",
+      zeroForOne ? token0.address : token1.address,
+      zeroForOne ? token1.address : token0.address,
+      result.swapAmount.toString()
+    );
+    // console.log("quoteAmount2:", quoteAmount2);
+    const numerator2 = ethers.BigNumber.from(quoteAmount2).mul(
+      zeroForOne
+        ? ethers.BigNumber.from((10 ** decimalsToken0).toString())
+        : ethers.BigNumber.from((10 ** decimalsToken1).toString())
+    );
+    const denominator2 = result.swapAmount.mul(
+      zeroForOne
+        ? ethers.BigNumber.from((10 ** decimalsToken1).toString())
+        : ethers.BigNumber.from((10 ** decimalsToken0).toString())
+    );
+    const price2 = numerator2
+      .mul(ethers.utils.parseEther("1"))
+      .div(denominator2);
+    // console.log("price2 check:", price2.toString());
+
+    // given the new price, let's get a new swap amount and see if it changes
+    const result2 = await resolver.getRebalanceParams(
+      vault.address,
+      amount0Max,
+      amount1Max,
+      price2
+    );
+    // console.log(
+    //   "getRebalanceParams - result2.swapAmount.toString():",
+    //   result2.swapAmount.toString()
+    // );
+    expect(result2.zeroForOne).to.be.equals(zeroForOne);
+
+    // given this new swapAmount, how much of the other token will I receive?
+    const quoteAmount3 = await quote1Inch(
+      "1",
+      zeroForOne ? token0.address : token1.address,
+      zeroForOne ? token1.address : token0.address,
+      result2.swapAmount.toString()
+    );
+    // console.log("quoteAmount3:", quoteAmount3);
+
+    // if (zeroForOne) {
+    //   amount0Use = amount0Max.sub(result2.swapAmount);
+    //   amount1Use = amount1Max.add(ethers.BigNumber.from(quoteAmount3));
+    // } else {
+    //   amount0Use = amount0Max.add(ethers.BigNumber.from(quoteAmount3));
+    //   amount1Use = amount1Max.sub(result2.swapAmount);
+    // }
+    // console.log("amount0Use.toString(): ", amount0Use.toString());
+    // console.log("amount1Use.toString() ", amount1Use.toString());
+    // const mintAmounts = await vault.getMintAmounts(amount0Use, amount1Use);
+    // console.log(
+    //   "mintAmounts.amount0.toString() ",
+    //   mintAmounts.amount0.toString()
+    // );
+    // console.log(
+    //   "mintAmounts.amount1.toString() ",
+    //   mintAmounts.amount1.toString()
+    // );
+    // console.log(
+    //   "mintAmounts.mintAmount.toString() ",
+    //   mintAmounts.mintAmount.toString()
+    // );
+
+    const swapParams = await swapTokenData(
+      "1",
+      zeroForOne ? token0.address : token1.address,
+      zeroForOne ? token1.address : token0.address,
+      result2.swapAmount.toString(),
+      vaultRouter.address,
+      "5"
+    );
+
+    const addData = {
+      amount0Max: amount0Max,
+      amount1Max: amount1Max,
+      amount0Min: 0,
+      amount1Min: 0,
+      receiver: await wallet.getAddress(),
+      useETH: false,
+      gaugeAddress: "0x0000000000000000000000000000000000000000",
+    };
+
+    const amountOut = ethers.BigNumber.from(quoteAmount3)
+      .mul(ethers.BigNumber.from((95).toString()))
+      .div(ethers.BigNumber.from((100).toString())); // -5% (slippage protection)
+    // console.log("amountOut.toString(): ", amountOut.toString());
+
+    const swapData = {
+      amountInSwap: result2.swapAmount.toString(),
+      amountOutSwap: amountOut,
+      zeroForOne: zeroForOne,
+      swapRouter: swapParams.to,
+      swapPayload: swapParams.data,
+    };
+
+    // flag indicating if "Swapped" event fired
+    let hasSwapped = false;
+    // flag indicating if "Minted" event fired
+    let hasMinted = false;
+
+    // object to be filled with "Swapped" event data
+    const swapppedEventData = {
+      zeroForOne: false,
+      amount0Diff: ethers.BigNumber.from(0),
+      amount1Diff: ethers.BigNumber.from(0),
+    };
+    // object to be filled with "Minted" event data
+    const mintedEventData = {
+      receiver: "",
+      mintAmount: ethers.BigNumber.from(0),
+      amount0In: ethers.BigNumber.from(0),
+      amount1In: ethers.BigNumber.from(0),
+      liquidityMinted: ethers.BigNumber.from(0),
+    };
+
+    // listener for getting data from "Swapped" event
+    vaultRouter.on("Swapped", (zeroForOne, amount0Diff, amount1Diff) => {
+      // console.log("swapped!");
+      swapppedEventData.zeroForOne = zeroForOne;
+      swapppedEventData.amount0Diff = ethers.BigNumber.from(amount0Diff);
+      swapppedEventData.amount1Diff = ethers.BigNumber.from(amount1Diff);
+      hasSwapped = true;
+    });
+    // listener for getting data from "Minted" event
+    vault.on(
+      "Minted",
+      (receiver, mintAmount, amount0In, amount1In, liquidityMinted) => {
+        // console.log("minted!");
+        mintedEventData.receiver = receiver;
+        mintedEventData.mintAmount = ethers.BigNumber.from(mintAmount);
+        mintedEventData.amount0In = ethers.BigNumber.from(amount0In);
+        mintedEventData.amount1In = ethers.BigNumber.from(amount1In);
+        mintedEventData.liquidityMinted =
+          ethers.BigNumber.from(liquidityMinted);
+        hasMinted = true;
+      }
+    );
+    // function that returns a promise that resolves when "Swapped" and "Minted" are fired
+    const getEventsData = async () => {
+      return new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          if (hasSwapped && hasMinted) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 5000);
+      });
+    };
+
+    const swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
+      vault.address,
+      addData,
+      swapData
+    );
+    await swapAndAddTxPending.wait();
+
+    const balance0After = await token0.balanceOf(await wallet.getAddress());
+    const balance1After = await token1.balanceOf(await wallet.getAddress());
+    const balanceRakisAfter = await rakisToken.balanceOf(
+      await wallet.getAddress()
+    );
+
+    if (amount0Max.gt(0)) {
+      expect(balance0Before).to.be.gt(balance0After);
+    }
+    if (amount1Max.gt(0)) {
+      expect(balance1Before).to.be.gt(balance1After);
+    }
+    expect(balanceRakisBefore).to.be.lt(balanceRakisAfter);
+
+    // console.log(
+    //   "DAI input:",
+    //   ethers.utils.formatUnits(balance0Before.sub(balance0After), "18")
+    // );
+    // console.log(
+    //   "USDC input:",
+    //   ethers.utils.formatUnits(balance1Before.sub(balance1After), "6")
+    // );
+    // console.log(
+    //   "RAKIS minted:",
+    //   balanceRakisBefore.sub(balanceRakisAfter).toString()
+    // );
+
+    const routerBalance0 = await token0.balanceOf(vaultRouter.address);
+    const routerBalance1 = await token1.balanceOf(vaultRouter.address);
+    const routerBalanceRakis = await rakisToken.balanceOf(vaultRouter.address);
+
+    expect(routerBalance0).to.equal(ethers.constants.Zero);
+    expect(routerBalance1).to.equal(ethers.constants.Zero);
+    expect(routerBalanceRakis).to.equal(ethers.constants.Zero);
+
+    const wrapperBalance0 = await token0.balanceOf(vaultRouterWrapper.address);
+    const wrapperBalance1 = await token1.balanceOf(vaultRouterWrapper.address);
+    const wrapperBalanceRakis = await rakisToken.balanceOf(
+      vaultRouterWrapper.address
+    );
+
+    expect(wrapperBalance0).to.equal(ethers.constants.Zero);
+    expect(wrapperBalance1).to.equal(ethers.constants.Zero);
+    expect(wrapperBalanceRakis).to.equal(ethers.constants.Zero);
+
+    await getEventsData();
+    // console.log("swapped! zeroForOne: ", swapppedEventData.zeroForOne);
+    // console.log(
+    //   "swapped amount0Diff: ",
+    //   swapppedEventData.amount0Diff.toString()
+    // );
+    // console.log(
+    //   "swapped amount1Diff: ",
+    //   swapppedEventData.amount1Diff.toString()
+    // );
+    // console.log("minted! receiver: ", mintedEventData.receiver);
+    // console.log(
+    //   "mintedEventData mintAmount: ",
+    //   mintedEventData.mintAmount.toString()
+    // );
+    // console.log(
+    //   "mintedEventData amount0In: ",
+    //   mintedEventData.amount0In.toString()
+    // );
+    // console.log(
+    //   "mintedEventData amount1In: ",
+    //   mintedEventData.amount1In.toString()
+    // );
+
+    // now that we have "Swapped" and "Minted" data, let's validate balance/refunds
+    if (swapppedEventData.zeroForOne) {
+      amount0Use = addData.amount0Max.sub(swapppedEventData.amount0Diff);
+      amount1Use = addData.amount1Max.add(swapppedEventData.amount1Diff);
+
+      // validating amountOut
+      expect(amountOut).to.be.lt(swapppedEventData.amount1Diff);
+    } else {
+      amount0Use = addData.amount0Max.add(swapppedEventData.amount0Diff);
+      amount1Use = addData.amount1Max.sub(swapppedEventData.amount1Diff);
+
+      expect(amountOut).to.be.lt(swapppedEventData.amount0Diff);
+    }
+    const refund0 = amount0Use.sub(mintedEventData.amount0In);
+    const refund1 = amount1Use.sub(mintedEventData.amount1In);
+    expect(balance0After).to.equal(
+      balance0Before.sub(addData.amount0Max).add(refund0)
+    );
+    expect(balance1After).to.equal(
+      balance1Before.sub(addData.amount1Max).add(refund1)
+    );
+  };
+
   before(async function () {
     await deployments.fixture();
 
@@ -61,14 +400,14 @@ describe("ArrakisV1 Staking Router tests", function () {
       poolAddress
     )) as IArrakisVaultV1;
     token0 = (await ethers.getContractAt(
-      "IERC20",
+      "ERC20",
       await vault.token0()
-    )) as IERC20;
+    )) as ERC20;
     token1 = (await ethers.getContractAt(
-      "IERC20",
+      "ERC20",
       await vault.token1()
-    )) as IERC20;
-    rakisToken = (await ethers.getContractAt("IERC20", poolAddress)) as IERC20;
+    )) as ERC20;
+    rakisToken = (await ethers.getContractAt("ERC20", poolAddress)) as ERC20;
 
     const swappersWhitelistAddress = (
       await deployments.get("ArrakisSwappersWhitelist")
@@ -137,9 +476,9 @@ describe("ArrakisV1 Staking Router tests", function () {
       .deploy(gaugeImpl.address, await wallet.getAddress(), encoded);
     gauge = await ethers.getContractAt(Gauge.abi, contract.address);
     stRakisToken = (await ethers.getContractAt(
-      "IERC20",
+      "ERC20",
       gauge.address
-    )) as IERC20;
+    )) as ERC20;
 
     contractBalanceEth = await wallet.provider?.getBalance(vaultRouter.address);
     // expect(contractBalanceEth).to.equal(1);
@@ -506,9 +845,9 @@ describe("ArrakisV1 Staking Router tests", function () {
         .deploy(gaugeImpl.address, await wallet.getAddress(), encoded);
       gauge = await ethers.getContractAt(Gauge.abi, contract.address);
       stRakisToken = (await ethers.getContractAt(
-        "IERC20",
+        "ERC20",
         gauge.address
-      )) as IERC20;
+      )) as ERC20;
 
       await gauge
         .connect(wallet)
@@ -664,314 +1003,48 @@ describe("ArrakisV1 Staking Router tests", function () {
       expect(contractBalanceEth).to.equal(contractBalanceEthEnd);
     });
   });
-  describe("swaps", function () {
-    it("should swap and deposit funds", async function () {
-      // token0 is DAI
-      const spendAmountDAI = ethers.utils.parseUnits("100000", "18");
-      const spendAmountUSDC = ethers.utils.parseUnits("100000", "6");
-      console.log("spendAmountDAI: ", spendAmountDAI?.toString());
-      console.log("spendAmountUSDC: ", spendAmountUSDC?.toString());
-
-      await token0
-        .connect(wallet)
-        .approve(vaultRouterWrapper.address, spendAmountDAI);
-      await token1
-        .connect(wallet)
-        .approve(vaultRouterWrapper.address, spendAmountUSDC);
-
-      const balance0Before = await token0.balanceOf(await wallet.getAddress());
-      const balance1Before = await token1.balanceOf(await wallet.getAddress());
-      const balanceRakisBefore = await rakisToken.balanceOf(
-        await wallet.getAddress()
-      );
-
-      const [amount0Current, amount1Current] =
-        await vault.getUnderlyingBalances();
-      console.log("amount0Current: ", amount0Current?.toString());
-      console.log("amount1Current: ", amount1Current?.toString());
-
-      // amount here is not so important, as what we want is an initial price for this asset pair
-      const quoteAmount = await quote1Inch(
-        "1",
-        addresses.USDC,
-        addresses.DAI,
-        spendAmountUSDC.toString()
-      );
-      console.log("quoteAmount: ", quoteAmount);
-
-      const denominator = ethers.BigNumber.from(quoteAmount).mul(
-        ethers.BigNumber.from((10 ** 6).toString())
-      );
-      const numerator = ethers.BigNumber.from(spendAmountUSDC).mul(
-        ethers.utils.parseEther("1")
-      );
-      const priceX18 = numerator
-        .mul(ethers.utils.parseEther("1"))
-        .div(denominator);
-      console.log("price check:", priceX18.toString());
-
-      // given this price and the amounts the user is willing to spend
-      // which token should be swapped and how much
-      const result = await resolver.getRebalanceParams(
-        vault.address,
-        spendAmountDAI,
-        spendAmountUSDC,
-        priceX18
-      );
-      console.log(
-        "getRebalanceParams - result.swapAmount.toString(): ",
-        result.swapAmount.toString()
-      );
-      expect(result.zeroForOne).to.be.false; // this pool has 4.5x more DAI than USDC
-
-      // now that we know how much to swap, let's get a new quote
-      const quoteAmount2 = await quote1Inch(
-        "1",
-        addresses.USDC,
-        addresses.DAI,
-        result.swapAmount.toString()
-      );
-      console.log("quoteAmount2:", quoteAmount2);
-      const denominator2 = ethers.BigNumber.from(quoteAmount2).mul(
-        ethers.BigNumber.from((10 ** 6).toString())
-      );
-      const numerator2 = result.swapAmount.mul(ethers.utils.parseEther("1"));
-      const price2 = numerator2
-        .mul(ethers.utils.parseEther("1"))
-        .div(denominator2);
-      console.log("price2 check:", price2.toString());
-
-      // given the new price, let's get a new swap amount and see if it changes
-      const result2 = await resolver.getRebalanceParams(
-        vault.address,
-        spendAmountDAI,
-        spendAmountUSDC,
-        price2
-      );
-      expect(result2.zeroForOne).to.be.false;
-      console.log(
-        "getRebalanceParams - result2.swapAmount.toString():",
-        result2.swapAmount.toString()
-      );
-
-      // given this new swapAmount, how much of the other token will I receive?
-      const quoteAmount3 = await quote1Inch(
-        "1",
-        addresses.USDC,
-        addresses.DAI,
-        result2.swapAmount.toString()
-      );
-      console.log("quoteAmount3:", quoteAmount3);
-
-      const amountDAIUse = spendAmountDAI.add(
-        ethers.BigNumber.from(quoteAmount3)
-      );
-      const amountUSDCUse = spendAmountUSDC.sub(result2.swapAmount);
-      console.log("amountDAIUse.toString(): ", amountDAIUse.toString());
-      console.log("amountUSDCUse.toString() ", amountUSDCUse.toString());
-      const mintAmounts = await vault.getMintAmounts(
-        amountDAIUse,
-        amountUSDCUse
-      );
-      console.log(
-        "mintAmounts.amount0.toString() ",
-        mintAmounts.amount0.toString()
-      );
-      console.log(
-        "mintAmounts.amount1.toString() ",
-        mintAmounts.amount1.toString()
-      );
-      console.log(
-        "mintAmounts.mintAmount.toString() ",
-        mintAmounts.mintAmount.toString()
-      );
-
-      const swapParams = await swapTokenData(
-        "1",
-        addresses.USDC,
-        addresses.DAI,
-        result2.swapAmount.toString(),
-        vaultRouter.address,
-        "5"
-      );
-
-      const addData = {
-        amount0Max: spendAmountDAI,
-        amount1Max: spendAmountUSDC,
-        amount0Min: 0,
-        amount1Min: 0,
-        receiver: await wallet.getAddress(),
-        useETH: false,
-        gaugeAddress: "0x0000000000000000000000000000000000000000",
-      };
-
-      const amountOut = ethers.BigNumber.from(quoteAmount3)
-        .mul(ethers.BigNumber.from((95).toString()))
-        .div(ethers.BigNumber.from((100).toString())); // -5% (slippage protection)
-      console.log("amountOut.toString(): ", amountOut.toString());
-
-      const swapData = {
-        amountInSwap: result2.swapAmount.toString(),
-        amountOutSwap: amountOut,
-        zeroForOne: result2.zeroForOne,
-        swapRouter: swapParams.to,
-        swapPayload: swapParams.data,
-      };
-
-      // flag indicating if "Swapped" event fired
-      let hasSwapped = false;
-      // flag indicating if "Minted" event fired
-      let hasMinted = false;
-
-      // object to be filled with "Swapped" event data
-      const swapppedEventData = {
-        zeroForOne: false,
-        amount0Diff: ethers.BigNumber.from(0),
-        amount1Diff: ethers.BigNumber.from(0),
-      };
-      // object to be filled with "Minted" event data
-      const mintedEventData = {
-        receiver: "",
-        mintAmount: ethers.BigNumber.from(0),
-        amount0In: ethers.BigNumber.from(0),
-        amount1In: ethers.BigNumber.from(0),
-        liquidityMinted: ethers.BigNumber.from(0),
-      };
-
-      // listener for getting data from "Swapped" event
-      vaultRouter.on("Swapped", (zeroForOne, amount0Diff, amount1Diff) => {
-        console.log("swapped!");
-        swapppedEventData.zeroForOne = zeroForOne;
-        swapppedEventData.amount0Diff = ethers.BigNumber.from(amount0Diff);
-        swapppedEventData.amount1Diff = ethers.BigNumber.from(amount1Diff);
-        hasSwapped = true;
+  describe("Swaps on in-range positions", function () {
+    describe("DAI/USDC pool", function () {
+      it("should use A and B, swap A for B and deposit funds", async function () {
+        await swapAndAddTest(
+          vault,
+          token0,
+          token1,
+          ethers.BigNumber.from("1000000"),
+          ethers.BigNumber.from("100000"),
+          true
+        );
       });
-      // listener for getting data from "Minted" event
-      vault.on(
-        "Minted",
-        (receiver, mintAmount, amount0In, amount1In, liquidityMinted) => {
-          console.log("minted!");
-          mintedEventData.receiver = receiver;
-          mintedEventData.mintAmount = ethers.BigNumber.from(mintAmount);
-          mintedEventData.amount0In = ethers.BigNumber.from(amount0In);
-          mintedEventData.amount1In = ethers.BigNumber.from(amount1In);
-          mintedEventData.liquidityMinted =
-            ethers.BigNumber.from(liquidityMinted);
-          hasMinted = true;
-        }
-      );
-      // function that returns a promise that resolves when "Swapped" and "Minted" are fired
-      const getEventsData = async () => {
-        return new Promise<void>((resolve) => {
-          const interval = setInterval(() => {
-            if (hasSwapped && hasMinted) {
-              clearInterval(interval);
-              resolve();
-            }
-          }, 5000);
-        });
-      };
-
-      const swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
-        vault.address,
-        addData,
-        swapData
-      );
-      await swapAndAddTxPending.wait();
-
-      const balance0After = await token0.balanceOf(await wallet.getAddress());
-      const balance1After = await token1.balanceOf(await wallet.getAddress());
-      const balanceRakisAfter = await rakisToken.balanceOf(
-        await wallet.getAddress()
-      );
-
-      expect(balance0Before).to.be.gt(balance0After);
-      expect(balance1Before).to.be.gt(balance1After);
-      expect(balanceRakisBefore).to.be.lt(balanceRakisAfter);
-
-      console.log(
-        "DAI input:",
-        ethers.utils.formatUnits(balance0Before.sub(balance0After), "18")
-      );
-      console.log(
-        "USDC input:",
-        ethers.utils.formatUnits(balance1Before.sub(balance1After), "6")
-      );
-      console.log(
-        "RAKIS minted:",
-        balanceRakisBefore.sub(balanceRakisAfter).toString()
-      );
-
-      const routerBalance0 = await token0.balanceOf(vaultRouter.address);
-      const routerBalance1 = await token1.balanceOf(vaultRouter.address);
-      const routerBalanceRakis = await rakisToken.balanceOf(
-        vaultRouter.address
-      );
-
-      expect(routerBalance0).to.equal(ethers.constants.Zero);
-      expect(routerBalance1).to.equal(ethers.constants.Zero);
-      expect(routerBalanceRakis).to.equal(ethers.constants.Zero);
-
-      const wrapperBalance0 = await token0.balanceOf(
-        vaultRouterWrapper.address
-      );
-      const wrapperBalance1 = await token1.balanceOf(
-        vaultRouterWrapper.address
-      );
-      const wrapperBalanceRakis = await rakisToken.balanceOf(
-        vaultRouterWrapper.address
-      );
-
-      expect(wrapperBalance0).to.equal(ethers.constants.Zero);
-      expect(wrapperBalance1).to.equal(ethers.constants.Zero);
-      expect(wrapperBalanceRakis).to.equal(ethers.constants.Zero);
-
-      await getEventsData();
-      console.log("swapped! zeroForOne: ", swapppedEventData.zeroForOne);
-      console.log(
-        "swapped amount0Diff: ",
-        swapppedEventData.amount0Diff.toString()
-      );
-      console.log(
-        "swapped amount1Diff: ",
-        swapppedEventData.amount1Diff.toString()
-      );
-      console.log("minted! receiver: ", mintedEventData.receiver);
-      console.log(
-        "mintedEventData mintAmount: ",
-        mintedEventData.mintAmount.toString()
-      );
-      console.log(
-        "mintedEventData amount0In: ",
-        mintedEventData.amount0In.toString()
-      );
-      console.log(
-        "mintedEventData amount1In: ",
-        mintedEventData.amount1In.toString()
-      );
-      // now that we have "Swapped" and "Minted" data, let's validate balance/refunds
-      let amount0Use = ethers.BigNumber.from(0);
-      let amount1Use = ethers.BigNumber.from(0);
-      if (swapppedEventData.zeroForOne) {
-        amount0Use = addData.amount0Max.sub(swapppedEventData.amount0Diff);
-        amount1Use = addData.amount1Max.add(swapppedEventData.amount1Diff);
-
-        // validating amountOut
-        expect(amountOut).to.be.lt(swapppedEventData.amount1Diff);
-      } else {
-        amount0Use = addData.amount0Max.add(swapppedEventData.amount0Diff);
-        amount1Use = addData.amount1Max.sub(swapppedEventData.amount1Diff);
-
-        expect(amountOut).to.be.lt(swapppedEventData.amount0Diff);
-      }
-      const refund0 = amount0Use.sub(mintedEventData.amount0In);
-      const refund1 = amount1Use.sub(mintedEventData.amount1In);
-      expect(balance0After).to.equal(
-        balance0Before.sub(addData.amount0Max).add(refund0)
-      );
-      expect(balance1After).to.equal(
-        balance1Before.sub(addData.amount1Max).add(refund1)
-      );
+      it("should use A and B, swap B for A and deposit funds", async function () {
+        await swapAndAddTest(
+          vault,
+          token0,
+          token1,
+          ethers.BigNumber.from("100000"),
+          ethers.BigNumber.from("100000"),
+          false
+        );
+      });
+      it("should use only A, swap A for B and deposit funds", async function () {
+        await swapAndAddTest(
+          vault,
+          token0,
+          token1,
+          ethers.BigNumber.from("100000"),
+          ethers.BigNumber.from("0"),
+          true
+        );
+      });
+      it("should use only B, swap B for A and deposit funds", async function () {
+        await swapAndAddTest(
+          vault,
+          token0,
+          token1,
+          ethers.BigNumber.from("0"),
+          ethers.BigNumber.from("100000"),
+          false
+        );
+      });
     });
   });
 });
