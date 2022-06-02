@@ -257,7 +257,7 @@ describe("ArrakisV1 Router tests", function () {
     it("addLiquidityETH, rebalanceAndAddLiquidityETH, removeLiquidityETH", async function () {
       const arrakisWethVault = (await ethers.getContractAt(
         "IArrakisVaultV1",
-        addresses.ArrakisV1WethPool
+        addresses.ArrakisV1UsdcWethPool
       )) as IArrakisVaultV1;
       const token0W = (await ethers.getContractAt(
         "IERC20",
@@ -269,7 +269,7 @@ describe("ArrakisV1 Router tests", function () {
       )) as IERC20;
       const rakisTokenW = (await ethers.getContractAt(
         "IERC20",
-        addresses.ArrakisV1WethPool
+        addresses.ArrakisV1UsdcWethPool
       )) as IERC20;
       const decimals0W = Number(
         await (
