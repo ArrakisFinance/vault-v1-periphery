@@ -27,6 +27,9 @@ import {
     OwnableUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {
+    ReentrancyGuardUpgradeable
+} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import {
     IArrakisSwappersWhitelist
 } from "./interfaces/IArrakisSwappersWhitelist.sol";
 import {
@@ -37,7 +40,8 @@ contract ArrakisV1RouterWrapper is
     IArrakisV1RouterWrapper,
     Initializable,
     PausableUpgradeable,
-    OwnableUpgradeable
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
 {
     using Address for address payable;
     using SafeERC20 for IERC20;
@@ -54,6 +58,7 @@ contract ArrakisV1RouterWrapper is
     function initialize() external initializer {
         __Pausable_init();
         __Ownable_init();
+        __ReentrancyGuard_init();
     }
 
     function pause() external onlyOwner {
@@ -79,6 +84,7 @@ contract ArrakisV1RouterWrapper is
         payable
         override
         whenNotPaused
+        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -157,6 +163,7 @@ contract ArrakisV1RouterWrapper is
         external
         override
         whenNotPaused
+        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -214,6 +221,7 @@ contract ArrakisV1RouterWrapper is
         payable
         override
         whenNotPaused
+        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -271,6 +279,8 @@ contract ArrakisV1RouterWrapper is
         );
     }
 
+    /// @notice updates address of ArrakisV1Router used by this wrapper
+    /// @param _router the router address
     function updateRouter(IArrakisV1Router _router) external onlyOwner {
         router = _router;
     }

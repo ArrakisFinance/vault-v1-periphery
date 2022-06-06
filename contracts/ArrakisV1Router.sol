@@ -26,13 +26,17 @@ import {
 import {
     OwnableUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {
+    ReentrancyGuardUpgradeable
+} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import {GelatoBytes} from "./vendor/gelato/GelatoBytes.sol";
 
 contract ArrakisV1Router is
     IArrakisV1Router,
     Initializable,
     PausableUpgradeable,
-    OwnableUpgradeable
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
 {
     using Address for address payable;
     using SafeERC20 for IERC20;
@@ -55,6 +59,7 @@ contract ArrakisV1Router is
     function initialize() external initializer {
         __Pausable_init();
         __Ownable_init();
+        __ReentrancyGuard_init();
     }
 
     function pause() external onlyOwner {
@@ -83,6 +88,7 @@ contract ArrakisV1Router is
         override
         whenNotPaused
         onlyRouterWrapper
+        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -129,7 +135,9 @@ contract ArrakisV1Router is
     )
         external
         override
+        whenNotPaused
         onlyRouterWrapper
+        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -182,6 +190,7 @@ contract ArrakisV1Router is
         override
         whenNotPaused
         onlyRouterWrapper
+        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
