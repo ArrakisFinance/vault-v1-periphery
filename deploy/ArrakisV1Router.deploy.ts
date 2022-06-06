@@ -19,6 +19,10 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const { deployer } = await getNamedAccounts();
   const addresses = getAddresses(hre.network.name);
 
+  const arrakisV1RouterWrapper = await deployments.get(
+    "ArrakisV1RouterWrapper"
+  );
+
   await deploy("ArrakisV1Router", {
     from: deployer,
     proxy: {
@@ -31,19 +35,23 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
         },
       },
     },
-    args: [addresses.UniswapV3Factory, addresses.WETH],
+    args: [addresses.WETH, arrakisV1RouterWrapper.address],
+    log: hre.network.name !== "hardhat",
+    gasPrice: hre.ethers.utils.parseUnits("50", "gwei"),
   });
 };
 
 func.skip = async (hre: HardhatRuntimeEnvironment) => {
   const shouldSkip =
     hre.network.name === "mainnet" ||
-    hre.network.name === "polygon" ||
+    //hre.network.name === "polygon" ||
     hre.network.name === "optimism" ||
     hre.network.name === "goerli";
   return shouldSkip ? true : false;
 };
 
 func.tags = ["ArrakisV1Router"];
+
+func.dependencies = ["ArrakisV1RouterWrapper"];
 
 export default func;

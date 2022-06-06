@@ -4,12 +4,12 @@ pragma solidity 0.8.4;
 
 import {
     IGauge,
-    IArrakisV1RouterStaking,
+    IArrakisV1Router,
     AddLiquidityData,
     MintData,
     RemoveLiquidityData,
     SwapData
-} from "./interfaces/IArrakisV1RouterStaking.sol";
+} from "./interfaces/IArrakisV1Router.sol";
 import {IArrakisVaultV1} from "./interfaces/IArrakisVaultV1.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
 import {
@@ -44,7 +44,7 @@ contract ArrakisV1RouterWrapper is
 
     IWETH public immutable weth;
     IArrakisSwappersWhitelist public immutable whitelist;
-    IArrakisV1RouterStaking public router;
+    IArrakisV1Router public router;
 
     constructor(IWETH _weth, IArrakisSwappersWhitelist _whitelist) {
         weth = _weth;
@@ -243,8 +243,7 @@ contract ArrakisV1RouterWrapper is
 
         if (
             _addData.amount0Max > 0 &&
-            (!_addData.useETH ||
-                (_addData.useETH && _swapData.zeroForOne && !isToken0Weth))
+            (!_addData.useETH || (_addData.useETH && !isToken0Weth))
         ) {
             IERC20(pool.token0()).safeTransferFrom(
                 msg.sender,
@@ -254,8 +253,7 @@ contract ArrakisV1RouterWrapper is
         }
         if (
             _addData.amount1Max > 0 &&
-            (!_addData.useETH ||
-                (_addData.useETH && !_swapData.zeroForOne && isToken0Weth))
+            (!_addData.useETH || (_addData.useETH && isToken0Weth))
         ) {
             IERC20(pool.token1()).safeTransferFrom(
                 msg.sender,
@@ -273,7 +271,7 @@ contract ArrakisV1RouterWrapper is
         );
     }
 
-    function updateRouter(IArrakisV1RouterStaking _router) external onlyOwner {
+    function updateRouter(IArrakisV1Router _router) external onlyOwner {
         router = _router;
     }
 

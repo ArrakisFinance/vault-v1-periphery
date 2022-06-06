@@ -37,7 +37,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
     },
     args: [addresses.WETH, arrakisSwappersWhitelist.address],
     log: hre.network.name !== "hardhat",
-    gasPrice: hre.ethers.utils.parseUnits("50", "gwei"),
+    // gasPrice: hre.ethers.utils.parseUnits("50", "gwei"),
   });
 };
 
