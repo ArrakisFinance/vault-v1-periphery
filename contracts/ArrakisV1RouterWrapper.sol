@@ -30,9 +30,6 @@ import {
     ReentrancyGuardUpgradeable
 } from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import {
-    IArrakisSwappersWhitelist
-} from "./interfaces/IArrakisSwappersWhitelist.sol";
-import {
     IArrakisV1RouterWrapper
 } from "./interfaces/IArrakisV1RouterWrapper.sol";
 
@@ -47,12 +44,10 @@ contract ArrakisV1RouterWrapper is
     using SafeERC20 for IERC20;
 
     IWETH public immutable weth;
-    IArrakisSwappersWhitelist public immutable whitelist;
     IArrakisV1Router public router;
 
-    constructor(IWETH _weth, IArrakisSwappersWhitelist _whitelist) {
+    constructor(IWETH _weth) {
         weth = _weth;
-        whitelist = _whitelist;
     }
 
     function initialize() external initializer {
@@ -91,6 +86,10 @@ contract ArrakisV1RouterWrapper is
             uint256 mintAmount
         )
     {
+        require(
+            _addData.amount0Max > 0 || _addData.amount1Max > 0,
+            "Empty max amounts"
+        );
         (uint256 amount0In, uint256 amount1In, uint256 _mintAmount) =
             pool.getMintAmounts(_addData.amount0Max, _addData.amount1Max);
         require(
@@ -231,8 +230,8 @@ contract ArrakisV1RouterWrapper is
         )
     {
         require(
-            whitelist.verify(_swapData.swapRouter),
-            "Swap router address not whitelisted!"
+            _addData.amount0Max > 0 || _addData.amount1Max > 0,
+            "Empty max amounts"
         );
         if (_addData.gaugeAddress != address(0)) {
             require(

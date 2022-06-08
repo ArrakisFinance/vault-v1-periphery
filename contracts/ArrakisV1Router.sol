@@ -365,22 +365,11 @@ contract ArrakisV1Router is
         if (!success) GelatoBytes.revertWithError(returnsData, "swap: ");
 
         // setting allowance to 0
+        IERC20(_pool.token0()).safeApprove(_swapData.swapRouter, 0);
         if (_swapData.zeroForOne) {
-            IERC20(_pool.token0()).safeDecreaseAllowance(
-                _swapData.swapRouter,
-                IERC20(_pool.token0()).allowance(
-                    address(this),
-                    _swapData.swapRouter
-                )
-            );
+            IERC20(_pool.token0()).safeApprove(_swapData.swapRouter, 0);
         } else {
-            IERC20(_pool.token1()).safeDecreaseAllowance(
-                _swapData.swapRouter,
-                IERC20(_pool.token1()).allowance(
-                    address(this),
-                    _swapData.swapRouter
-                )
-            );
+            IERC20(_pool.token1()).safeApprove(_swapData.swapRouter, 0);
         }
 
         uint256 balance0 = _pool.token0().balanceOf(address(this));
@@ -389,23 +378,17 @@ contract ArrakisV1Router is
             amount0Diff = balance0Before - balance0;
             amount1Diff = balance1 - balance1Before;
             require(
-                balance0Before > balance0 && balance1 > balance1Before,
+                (amount0Diff == _swapData.amountInSwap) &&
+                    (amount1Diff >= _swapData.amountOutSwap),
                 "Token0 swap failed!"
-            );
-            require(
-                _swapData.amountOutSwap < amount1Diff,
-                "Minimum amount of token1 not retrieved on swap!"
             );
         } else {
             amount0Diff = balance0 - balance0Before;
             amount1Diff = balance1Before - balance1;
             require(
-                balance0 > balance0Before && balance1Before > balance1,
+                (amount0Diff >= _swapData.amountOutSwap) &&
+                    (amount1Diff == _swapData.amountInSwap),
                 "Token1 swap failed!"
-            );
-            require(
-                _swapData.amountOutSwap < amount0Diff,
-                "Minimum amount of token1 not retrieved on swap!"
             );
         }
 

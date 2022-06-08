@@ -4,7 +4,7 @@ import { IERC20, IArrakisVaultV1 } from "../typechain";
 import { ERC20 } from "../typechain/ERC20";
 import { ArrakisV1Router } from "../typechain/ArrakisV1Router";
 import { ArrakisV1RouterWrapper } from "../typechain/ArrakisV1RouterWrapper";
-import { ArrakisSwappersWhitelist } from "../typechain/ArrakisSwappersWhitelist";
+// import { ArrakisSwappersWhitelist } from "../typechain/ArrakisSwappersWhitelist";
 import { IUniswapV3Pool } from "../typechain/IUniswapV3Pool";
 import { ArrakisV1Resolver } from "../typechain/ArrakisV1Resolver";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
@@ -39,7 +39,7 @@ describe("ArrakisV1Router tests", function () {
   let vault: IArrakisVaultV1;
   let vaultRouterWrapper: ArrakisV1RouterWrapper;
   let vaultRouter: ArrakisV1Router;
-  let swappersWhitelist: ArrakisSwappersWhitelist;
+  // let swappersWhitelist: ArrakisSwappersWhitelist;
   let resolver: ArrakisV1Resolver;
   let gauge: Contract;
   let routerBalanceEth: BigNumber | undefined;
@@ -482,6 +482,18 @@ describe("ArrakisV1Router tests", function () {
       expect(routerBalanceStRakis).to.equal(ethers.constants.Zero);
     }
 
+    // validate router - 1inch allowance
+    const routerAllowance0 = await token0.allowance(
+      vaultRouter.address,
+      addresses.OneInchRouter
+    );
+    const routerAllowance1 = await token1.allowance(
+      vaultRouter.address,
+      addresses.OneInchRouter
+    );
+    expect(routerAllowance0).to.equal(ethers.constants.Zero);
+    expect(routerAllowance1).to.equal(ethers.constants.Zero);
+
     // validate wrapper balances
     const wrapperBalance0 = await token0.balanceOf(vaultRouterWrapper.address);
     const wrapperBalance1 = await token1.balanceOf(vaultRouterWrapper.address);
@@ -563,16 +575,16 @@ describe("ArrakisV1Router tests", function () {
     )) as ERC20;
     rakisToken = (await ethers.getContractAt("ERC20", poolAddress)) as ERC20;
 
-    const swappersWhitelistAddress = (
-      await deployments.get("ArrakisSwappersWhitelist")
-    ).address;
+    // const swappersWhitelistAddress = (
+    //   await deployments.get("ArrakisSwappersWhitelist")
+    // ).address;
 
-    swappersWhitelist = (await ethers.getContractAt(
-      "ArrakisSwappersWhitelist",
-      swappersWhitelistAddress
-    )) as ArrakisSwappersWhitelist;
+    // swappersWhitelist = (await ethers.getContractAt(
+    //   "ArrakisSwappersWhitelist",
+    //   swappersWhitelistAddress
+    // )) as ArrakisSwappersWhitelist;
 
-    await swappersWhitelist.addToWhitelist(addresses.OneInchRouter);
+    // await swappersWhitelist.addToWhitelist(addresses.OneInchRouter);
 
     const vaultRouterAddress = (await deployments.get("ArrakisV1Router"))
       .address;
