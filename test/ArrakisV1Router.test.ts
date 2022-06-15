@@ -4,7 +4,6 @@ import { IERC20, IArrakisVaultV1 } from "../typechain";
 import { ERC20 } from "../typechain/ERC20";
 import { ArrakisV1Router } from "../typechain/ArrakisV1Router";
 import { ArrakisV1RouterWrapper } from "../typechain/ArrakisV1RouterWrapper";
-// import { ArrakisSwappersWhitelist } from "../typechain/ArrakisSwappersWhitelist";
 import { IUniswapV3Pool } from "../typechain/IUniswapV3Pool";
 import { ArrakisV1Resolver } from "../typechain/ArrakisV1Resolver";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
@@ -39,7 +38,6 @@ describe("ArrakisV1Router tests", function () {
   let vault: IArrakisVaultV1;
   let vaultRouterWrapper: ArrakisV1RouterWrapper;
   let vaultRouter: ArrakisV1Router;
-  // let swappersWhitelist: ArrakisSwappersWhitelist;
   let resolver: ArrakisV1Resolver;
   let gauge: Contract;
   let routerBalanceEth: BigNumber | undefined;
@@ -574,17 +572,6 @@ describe("ArrakisV1Router tests", function () {
       await vault.token1()
     )) as ERC20;
     rakisToken = (await ethers.getContractAt("ERC20", poolAddress)) as ERC20;
-
-    // const swappersWhitelistAddress = (
-    //   await deployments.get("ArrakisSwappersWhitelist")
-    // ).address;
-
-    // swappersWhitelist = (await ethers.getContractAt(
-    //   "ArrakisSwappersWhitelist",
-    //   swappersWhitelistAddress
-    // )) as ArrakisSwappersWhitelist;
-
-    // await swappersWhitelist.addToWhitelist(addresses.OneInchRouter);
 
     const vaultRouterAddress = (await deployments.get("ArrakisV1Router"))
       .address;

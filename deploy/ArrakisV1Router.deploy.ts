@@ -25,16 +25,6 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
 
   await deploy("ArrakisV1Router", {
     from: deployer,
-    proxy: {
-      proxyContract: "EIP173ProxyWithReceive",
-      owner: addresses.ArrakisDevMultiSig,
-      execute: {
-        init: {
-          methodName: "initialize",
-          args: [],
-        },
-      },
-    },
     args: [addresses.WETH, arrakisV1RouterWrapper.address],
     log: hre.network.name !== "hardhat",
     gasPrice: hre.ethers.utils.parseUnits("50", "gwei"),
