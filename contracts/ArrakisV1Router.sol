@@ -17,27 +17,9 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {
-    Initializable
-} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {
-    PausableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import {
-    OwnableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {
-    ReentrancyGuardUpgradeable
-} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import {GelatoBytes} from "./vendor/gelato/GelatoBytes.sol";
 
-contract ArrakisV1Router is
-    IArrakisV1Router,
-    Initializable,
-    PausableUpgradeable,
-    OwnableUpgradeable,
-    ReentrancyGuardUpgradeable
-{
+contract ArrakisV1Router is IArrakisV1Router {
     using Address for address payable;
     using SafeERC20 for IERC20;
 
@@ -56,19 +38,8 @@ contract ArrakisV1Router is
         routerWrapperAddress = _routerWrapperAddress;
     }
 
-    function initialize() external initializer {
-        __Pausable_init();
-        __Ownable_init();
-        __ReentrancyGuard_init();
-    }
-
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
-    }
+    // solhint-disable-next-line no-empty-blocks
+    receive() external payable {}
 
     /// @notice addLiquidity adds liquidity to ArrakisVaultV1 pool of interest (mints LP tokens)
     /// @param pool ArrakisVaultV1 pool to add liquidity to
@@ -86,9 +57,7 @@ contract ArrakisV1Router is
         external
         payable
         override
-        whenNotPaused
         onlyRouterWrapper
-        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -96,7 +65,7 @@ contract ArrakisV1Router is
         )
     {
         if (_addData.gaugeAddress != address(0)) {
-            (amount0, amount1, mintAmount) = _deposit(
+            _deposit(
                 pool,
                 _mintData.amount0In,
                 _mintData.amount1In,
@@ -106,14 +75,15 @@ contract ArrakisV1Router is
 
             IERC20(address(pool)).safeIncreaseAllowance(
                 _addData.gaugeAddress,
-                mintAmount
+                _mintData.mintAmount
             );
+
             IGauge(_addData.gaugeAddress).deposit(
-                mintAmount,
+                _mintData.mintAmount,
                 _addData.receiver
             );
         } else {
-            (amount0, amount1, mintAmount) = _deposit(
+            _deposit(
                 pool,
                 _mintData.amount0In,
                 _mintData.amount1In,
@@ -121,6 +91,9 @@ contract ArrakisV1Router is
                 _addData.receiver
             );
         }
+        amount0 = _mintData.amount0In;
+        amount1 = _mintData.amount1In;
+        mintAmount = _mintData.mintAmount;
     }
 
     /// @param pool ArrakisVaultV1 pool to remove liquidity from
@@ -135,9 +108,7 @@ contract ArrakisV1Router is
     )
         external
         override
-        whenNotPaused
         onlyRouterWrapper
-        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -188,9 +159,7 @@ contract ArrakisV1Router is
         external
         payable
         override
-        whenNotPaused
         onlyRouterWrapper
-        nonReentrant
         returns (
             uint256 amount0,
             uint256 amount1,
@@ -201,7 +170,6 @@ contract ArrakisV1Router is
     {
         (amount0Diff, amount1Diff) = _swap(pool, _swapData);
 
-        uint256 _mintAmount;
         uint256 amount0Use =
             (_swapData.zeroForOne)
                 ? _addData.amount0Max - amount0Diff
@@ -211,7 +179,7 @@ contract ArrakisV1Router is
                 ? _addData.amount1Max + amount1Diff
                 : _addData.amount1Max - amount1Diff;
 
-        (amount0, amount1, _mintAmount) = pool.getMintAmounts(
+        (amount0, amount1, mintAmount) = pool.getMintAmounts(
             amount0Use,
             amount1Use
         );
@@ -222,13 +190,7 @@ contract ArrakisV1Router is
         );
 
         if (_addData.gaugeAddress != address(0)) {
-            (amount0, amount1, mintAmount) = _deposit(
-                pool,
-                amount0,
-                amount1,
-                _mintAmount,
-                address(this)
-            );
+            _deposit(pool, amount0, amount1, mintAmount, address(this));
 
             IERC20(address(pool)).safeIncreaseAllowance(
                 _addData.gaugeAddress,
@@ -239,13 +201,7 @@ contract ArrakisV1Router is
                 _addData.receiver
             );
         } else {
-            (amount0, amount1, mintAmount) = _deposit(
-                pool,
-                amount0,
-                amount1,
-                _mintAmount,
-                _addData.receiver
-            );
+            _deposit(pool, amount0, amount1, mintAmount, _addData.receiver);
         }
 
         // now we send leftovers to user.
@@ -289,14 +245,7 @@ contract ArrakisV1Router is
         uint256 amount1In,
         uint256 _mintAmount,
         address receiver
-    )
-        internal
-        returns (
-            uint256 amount0,
-            uint256 amount1,
-            uint256 mintAmount
-        )
-    {
+    ) internal {
         if (amount0In > 0) {
             pool.token0().safeIncreaseAllowance(address(pool), amount0In);
         }
@@ -304,12 +253,11 @@ contract ArrakisV1Router is
             pool.token1().safeIncreaseAllowance(address(pool), amount1In);
         }
 
-        (amount0, amount1, ) = pool.mint(_mintAmount, receiver);
+        (uint256 amount0, uint256 amount1, ) = pool.mint(_mintAmount, receiver);
         require(
             amount0 == amount0In && amount1 == amount1In,
             "unexpected amounts deposited"
         );
-        mintAmount = _mintAmount;
     }
 
     // solhint-disable-next-line code-complexity

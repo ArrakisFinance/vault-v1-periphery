@@ -19,10 +19,6 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const { deployer } = await getNamedAccounts();
   const addresses = getAddresses(hre.network.name);
 
-  // const arrakisSwappersWhitelist = await deployments.get(
-  //   "ArrakisSwappersWhitelist"
-  // );
-
   await deploy("ArrakisV1RouterWrapper", {
     from: deployer,
     proxy: {
@@ -51,7 +47,5 @@ func.skip = async (hre: HardhatRuntimeEnvironment) => {
 };
 
 func.tags = ["ArrakisV1RouterWrapper"];
-
-// func.dependencies = ["ArrakisSwappersWhitelist"];
 
 export default func;
