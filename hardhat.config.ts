@@ -7,6 +7,7 @@ import "@nomiclabs/hardhat-waffle";
 import "@typechain/hardhat";
 import "hardhat-deploy";
 import "solidity-coverage";
+import "hardhat-gas-reporter";
 
 // Process Env Variables
 import * as dotenv from "dotenv";
@@ -63,7 +64,7 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.7.3",
+        version: "0.8.13",
         settings: {
           optimizer: { enabled: true },
         },

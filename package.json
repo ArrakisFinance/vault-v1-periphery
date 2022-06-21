@@ -55,5 +55,8 @@
   },
   "lint-staged": {
     "*.{ts,js}": "eslint -c .eslintrc.json"
+  },
+  "dependencies": {
+    "hardhat-gas-reporter": "^1.0.8"
   }
 }
