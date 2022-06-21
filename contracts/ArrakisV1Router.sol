@@ -26,7 +26,12 @@ contract ArrakisV1Router is IArrakisV1Router {
     IWETH public immutable weth;
     address public immutable routerWrapperAddress;
 
-    event Swapped(bool zeroForOne, uint256 amount0Diff, uint256 amount1Diff);
+    event Swapped(
+        bool zeroForOne,
+        uint256 amount0Diff,
+        uint256 amount1Diff,
+        uint256 amountOutSwap
+    );
 
     modifier onlyRouterWrapper() {
         require(msg.sender == routerWrapperAddress, "onlyRouterWrapper");
@@ -313,7 +318,6 @@ contract ArrakisV1Router is IArrakisV1Router {
         if (!success) GelatoBytes.revertWithError(returnsData, "swap: ");
 
         // setting allowance to 0
-        IERC20(_pool.token0()).safeApprove(_swapData.swapRouter, 0);
         if (_swapData.zeroForOne) {
             IERC20(_pool.token0()).safeApprove(_swapData.swapRouter, 0);
         } else {
@@ -340,7 +344,12 @@ contract ArrakisV1Router is IArrakisV1Router {
             );
         }
 
-        emit Swapped(_swapData.zeroForOne, amount0Diff, amount1Diff);
+        emit Swapped(
+            _swapData.zeroForOne,
+            amount0Diff,
+            amount1Diff,
+            _swapData.amountOutSwap
+        );
     }
 
     function _refundETH(address userToRefund, uint256 refundAmount) internal {

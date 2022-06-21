@@ -1339,6 +1339,7 @@ describe("ArrakisV1Router tests", function () {
       // console.log("isPositionInRange: ", isPositionInRange);
       // console.log("isToken0Empty: ", isToken0Empty);
 
+      // TODO: implement tests for other scenarios!
       if (isPositionInRange || (!isPositionInRange && isToken0Empty)) {
         console.log("\n use A,B and swap A for B");
         await swapAndAddTest(
@@ -1394,9 +1395,7 @@ describe("ArrakisV1Router tests", function () {
           "scenario1",
           stRakisTokenW
         );
-      }
-
-      if (isPositionInRange || (!isPositionInRange && isToken0Empty)) {
+        // single side
         console.log("\n use only A, swap A for B");
         await swapAndAddTest(
           arrakisWethVault,

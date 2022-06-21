@@ -107,7 +107,12 @@ contract ArrakisV1RouterWrapper is
 
         bool isToken0Weth;
         if (_addData.useETH) {
-            isToken0Weth = _wrapAndTransferETH(pool, amount0In, amount1In);
+            isToken0Weth = _wrapAndTransferETH(
+                pool,
+                amount0In,
+                amount1In,
+                false
+            );
         }
 
         if (
@@ -243,7 +248,8 @@ contract ArrakisV1RouterWrapper is
             isToken0Weth = _wrapAndTransferETH(
                 pool,
                 _addData.amount0Max,
-                _addData.amount1Max
+                _addData.amount1Max,
+                true
             );
         }
 
@@ -285,31 +291,29 @@ contract ArrakisV1RouterWrapper is
 
     /// @notice _wrapAndTransferETH wrap ETH into WETH and transfers to router
     /// @param pool The ArrakisVaultV1 pool
-    /// @param amount0In amount of token1 to be wrapped and transfered (if isToken0Weth)
+    /// @param amount0In amount of token0 to be wrapped and transfered (if isToken0Weth)
     /// @param amount1In amount of token1 to be wrapped and transfered (if !isToken0Weth)
+    /// @param matchAmount bool indicating if msg.value needs to be match the amount passed
     /// @return isToken0Weth bool indicating which token is WETH
     function _wrapAndTransferETH(
         IArrakisVaultV1 pool,
         uint256 amount0In,
-        uint256 amount1In
+        uint256 amount1In,
+        bool matchAmount
     ) internal returns (bool isToken0Weth) {
         isToken0Weth = _isToken0Weth(
             address(pool.token0()),
             address(pool.token1())
         );
-        require(
-            (isToken0Weth && amount0In <= msg.value) ||
-                (!isToken0Weth && amount1In <= msg.value),
-            "Not enough ETH forwarded"
-        );
-        if (isToken0Weth && amount0In > 0) {
-            weth.deposit{value: amount0In}();
-            IERC20(address(weth)).safeTransfer(address(router), amount0In);
+        uint256 wethAmount = isToken0Weth ? amount0In : amount1In;
+        if (matchAmount) {
+            require(wethAmount == msg.value, "Invalid amount of ETH forwarded");
+        } else {
+            require(wethAmount <= msg.value, "Not enough ETH forwarded");
         }
-        if (!isToken0Weth && amount1In > 0) {
-            weth.deposit{value: amount1In}();
-            IERC20(address(weth)).safeTransfer(address(router), amount1In);
-        }
+
+        weth.deposit{value: wethAmount}();
+        IERC20(address(weth)).safeTransfer(address(router), wethAmount);
     }
 
     function _isToken0Weth(address token0, address token1)
