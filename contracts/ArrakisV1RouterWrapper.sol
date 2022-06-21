@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity 0.8.4;
+pragma solidity >=0.8.13;
 
 import {
     IGauge,
@@ -8,7 +8,7 @@ import {
     AddLiquidityData,
     MintData,
     RemoveLiquidityData,
-    SwapData
+    AddAndSwapData
 } from "./interfaces/IArrakisV1Router.sol";
 import {IArrakisVaultV1} from "./interfaces/IArrakisVaultV1.sol";
 import {IWETH} from "./interfaces/IWETH.sol";
@@ -64,17 +64,13 @@ contract ArrakisV1RouterWrapper is
         _unpause();
     }
 
-    /// @notice addLiquidity adds liquidity to ArrakisVaultV1 pool of interest (mints LP tokens)
-    /// @param pool address of ArrakisVaultV1 pool to add liquidity to
+    /// @notice addLiquidity adds liquidity to an ArrakisVaultV1 vault
     /// @param _addData AddLiquidityData struct containing data for adding liquidity
     /// @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
     /// @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
     /// @return mintAmount amount of ArrakisVaultV1 tokens minted and transferred to `receiver`
     // solhint-disable-next-line code-complexity, function-max-lines
-    function addLiquidity(
-        IArrakisVaultV1 pool,
-        AddLiquidityData memory _addData
-    )
+    function addLiquidity(AddLiquidityData memory _addData)
         external
         payable
         override
@@ -89,8 +85,20 @@ contract ArrakisV1RouterWrapper is
             _addData.amount0Max > 0 || _addData.amount1Max > 0,
             "Empty max amounts"
         );
+
+        if (_addData.gaugeAddress != address(0)) {
+            require(
+                address(_addData.vault) ==
+                    IGauge(_addData.gaugeAddress).staking_token(),
+                "Incorrect gauge!"
+            );
+        }
+
         (uint256 amount0In, uint256 amount1In, uint256 _mintAmount) =
-            pool.getMintAmounts(_addData.amount0Max, _addData.amount1Max);
+            _addData.vault.getMintAmounts(
+                _addData.amount0Max,
+                _addData.amount1Max
+            );
         require(
             amount0In >= _addData.amount0Min &&
                 amount1In >= _addData.amount1Min,
@@ -98,17 +106,10 @@ contract ArrakisV1RouterWrapper is
         );
         require(_mintAmount > 0, "nothing to mint");
 
-        if (_addData.gaugeAddress != address(0)) {
-            require(
-                address(pool) == IGauge(_addData.gaugeAddress).staking_token(),
-                "Incorrect gauge!"
-            );
-        }
-
         bool isToken0Weth;
         if (_addData.useETH) {
             isToken0Weth = _wrapAndTransferETH(
-                pool,
+                _addData.vault,
                 amount0In,
                 amount1In,
                 false
@@ -119,7 +120,7 @@ contract ArrakisV1RouterWrapper is
             amount0In > 0 &&
             (!_addData.useETH || (_addData.useETH && !isToken0Weth))
         ) {
-            IERC20(pool.token0()).safeTransferFrom(
+            IERC20(_addData.vault.token0()).safeTransferFrom(
                 msg.sender,
                 address(router),
                 amount0In
@@ -129,40 +130,40 @@ contract ArrakisV1RouterWrapper is
             amount1In > 0 &&
             (!_addData.useETH || (_addData.useETH && isToken0Weth))
         ) {
-            IERC20(pool.token1()).safeTransferFrom(
+            IERC20(_addData.vault.token1()).safeTransferFrom(
                 msg.sender,
                 address(router),
                 amount1In
             );
         }
 
-        MintData memory _mintData = MintData(amount0In, amount1In, _mintAmount);
-        (amount0, amount1, mintAmount) = router.addLiquidity(
-            pool,
-            _addData,
-            _mintData
-        );
+        MintData memory _mintData =
+            MintData(
+                _addData.vault,
+                amount0In,
+                amount1In,
+                _mintAmount,
+                _addData.receiver,
+                _addData.gaugeAddress
+            );
+        (amount0, amount1, mintAmount) = router.addLiquidity(_mintData);
 
         if (_addData.useETH) {
             if (isToken0Weth && _addData.amount0Max > amount0) {
-                payable(msg.sender).sendValue(_addData.amount0Max - amount0);
+                payable(msg.sender).sendValue(msg.value - amount0);
             } else if (!isToken0Weth && _addData.amount1Max > amount1) {
-                payable(msg.sender).sendValue(_addData.amount1Max - amount1);
+                payable(msg.sender).sendValue(msg.value - amount1);
             }
         }
     }
 
-    /// @notice removeLiquidity removes liquidity from a ArrakisVaultV1 pool and burns LP tokens
-    /// @param pool address of ArrakisVaultV1 pool to remove liquidity from
+    /// @notice removeLiquidity removes liquidity from a ArrakisVaultV1 vault and burns LP tokens
     /// @param _removeData RemoveLiquidityData struct containing data for withdrawals
     /// @return amount0 actual amount of token0 transferred to receiver for burning `burnAmount`
     /// @return amount1 actual amount of token1 transferred to receiver for burning `burnAmount`
     /// @return liquidityBurned amount of liquidity removed from the underlying Uniswap V3 position
     // solhint-disable-next-line code-complexity, function-max-lines
-    function removeLiquidity(
-        IArrakisVaultV1 pool,
-        RemoveLiquidityData memory _removeData
-    )
+    function removeLiquidity(RemoveLiquidityData memory _removeData)
         external
         override
         whenNotPaused
@@ -176,7 +177,7 @@ contract ArrakisV1RouterWrapper is
         require(_removeData.burnAmount > 0, "nothing to burn");
         if (_removeData.gaugeAddress != address(0)) {
             require(
-                address(pool) ==
+                address(_removeData.vault) ==
                     IGauge(_removeData.gaugeAddress).staking_token(),
                 "Incorrect gauge!"
             );
@@ -188,38 +189,31 @@ contract ArrakisV1RouterWrapper is
             );
 
             IGauge(_removeData.gaugeAddress).withdraw(_removeData.burnAmount);
-            IERC20(address(pool)).safeTransfer(
+            IERC20(address(_removeData.vault)).safeTransfer(
                 address(router),
                 _removeData.burnAmount
             );
         } else {
-            IERC20(address(pool)).safeTransferFrom(
+            IERC20(address(_removeData.vault)).safeTransferFrom(
                 msg.sender,
                 address(router),
                 _removeData.burnAmount
             );
         }
         (amount0, amount1, liquidityBurned) = router.removeLiquidity(
-            pool,
             _removeData
         );
     }
 
     /// @notice swapAndAddLiquidity transfer tokens to and calls ArrakisV1Router
-    /// @param pool The ArrakisVaultV1 pool
-    /// @param _addData AddLiquidityData struct containing data for adding liquidity
-    /// @param _swapData SwapData struct containing data for swap
+    /// @param _swapData AddAndSwapData struct containing data for swaps and adding liquidity
     /// @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
     /// @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
     /// @return mintAmount amount of ArrakisVaultV1 tokens minted and transferred to `receiver`
     /// @return amount0Diff token0 balance difference post swap
     /// @return amount1Diff token1 balance difference post swap
     // solhint-disable-next-line code-complexity, function-max-lines
-    function swapAndAddLiquidity(
-        IArrakisVaultV1 pool,
-        AddLiquidityData memory _addData,
-        SwapData memory _swapData
-    )
+    function swapAndAddLiquidity(AddAndSwapData memory _swapData)
         external
         payable
         override
@@ -234,53 +228,49 @@ contract ArrakisV1RouterWrapper is
         )
     {
         require(
-            _addData.amount0Max > 0 || _addData.amount1Max > 0,
+            _swapData.amount0Max > 0 || _swapData.amount1Max > 0,
             "Empty max amounts"
         );
-        if (_addData.gaugeAddress != address(0)) {
+        if (_swapData.gaugeAddress != address(0)) {
             require(
-                address(pool) == IGauge(_addData.gaugeAddress).staking_token(),
+                address(_swapData.vault) ==
+                    IGauge(_swapData.gaugeAddress).staking_token(),
                 "Incorrect gauge!"
             );
         }
         bool isToken0Weth;
-        if (_addData.useETH) {
+        if (_swapData.useETH) {
             isToken0Weth = _wrapAndTransferETH(
-                pool,
-                _addData.amount0Max,
-                _addData.amount1Max,
+                _swapData.vault,
+                _swapData.amount0Max,
+                _swapData.amount1Max,
                 true
             );
         }
 
         if (
-            _addData.amount0Max > 0 &&
-            (!_addData.useETH || (_addData.useETH && !isToken0Weth))
+            _swapData.amount0Max > 0 &&
+            (!_swapData.useETH || (_swapData.useETH && !isToken0Weth))
         ) {
-            IERC20(pool.token0()).safeTransferFrom(
+            IERC20(_swapData.vault.token0()).safeTransferFrom(
                 msg.sender,
                 address(router),
-                _addData.amount0Max
+                _swapData.amount0Max
             );
         }
         if (
-            _addData.amount1Max > 0 &&
-            (!_addData.useETH || (_addData.useETH && isToken0Weth))
+            _swapData.amount1Max > 0 &&
+            (!_swapData.useETH || (_swapData.useETH && isToken0Weth))
         ) {
-            IERC20(pool.token1()).safeTransferFrom(
+            IERC20(_swapData.vault.token1()).safeTransferFrom(
                 msg.sender,
                 address(router),
-                _addData.amount1Max
+                _swapData.amount1Max
             );
         }
-
+        _swapData.userToRefund = payable(msg.sender);
         (amount0, amount1, mintAmount, amount0Diff, amount1Diff) = router
-            .swapAndAddLiquidity(
-            pool,
-            _addData,
-            _swapData,
-            payable(msg.sender)
-        );
+            .swapAndAddLiquidity(_swapData);
     }
 
     /// @notice updates address of ArrakisV1Router used by this wrapper
@@ -290,20 +280,20 @@ contract ArrakisV1RouterWrapper is
     }
 
     /// @notice _wrapAndTransferETH wrap ETH into WETH and transfers to router
-    /// @param pool The ArrakisVaultV1 pool
+    /// @param vault The ArrakisVaultV1 vault
     /// @param amount0In amount of token0 to be wrapped and transfered (if isToken0Weth)
     /// @param amount1In amount of token1 to be wrapped and transfered (if !isToken0Weth)
     /// @param matchAmount bool indicating if msg.value needs to be match the amount passed
     /// @return isToken0Weth bool indicating which token is WETH
     function _wrapAndTransferETH(
-        IArrakisVaultV1 pool,
+        IArrakisVaultV1 vault,
         uint256 amount0In,
         uint256 amount1In,
         bool matchAmount
     ) internal returns (bool isToken0Weth) {
         isToken0Weth = _isToken0Weth(
-            address(pool.token0()),
-            address(pool.token1())
+            address(vault.token0()),
+            address(vault.token1())
         );
         uint256 wethAmount = isToken0Weth ? amount0In : amount1In;
         if (matchAmount) {
@@ -326,7 +316,7 @@ contract ArrakisV1RouterWrapper is
         } else if (token1 == address(weth)) {
             wethToken0 = false;
         } else {
-            revert("one pool token must be WETH");
+            revert("one vault token must be WETH");
         }
     }
 }

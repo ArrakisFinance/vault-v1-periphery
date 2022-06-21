@@ -69,6 +69,7 @@ describe("ArrakisV1Router Security Tests", function () {
       await vaultRouterWrapper.pause();
 
       const addLiquidityData = {
+        vault: vault.address,
         amount0Max: 0,
         amount1Max: 0,
         amount0Min: 0,
@@ -79,7 +80,7 @@ describe("ArrakisV1Router Security Tests", function () {
       };
 
       await expect(
-        vaultRouterWrapper.addLiquidity(vault.address, addLiquidityData)
+        vaultRouterWrapper.addLiquidity(addLiquidityData)
       ).to.be.revertedWith("Pausable: paused");
       await vaultRouterWrapper.transferOwnership(proxyOwner);
       const owner = await vaultRouterWrapper.owner();

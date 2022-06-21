@@ -71,7 +71,8 @@ describe("ArrakisV1Router tests", function () {
     slippage: number,
     useETH: boolean,
     mockPayloadScenario?: string,
-    stRakisToken?: ERC20
+    stRakisToken?: ERC20,
+    transactionEthValue?: BigNumber
   ) => {
     const walletAddress = await wallet.getAddress();
 
@@ -277,7 +278,9 @@ describe("ArrakisV1Router tests", function () {
     // console.log("amountOut.toString(): ", amountOut.toString());
 
     // preparing parameter structs for swapAndAddLiquidity()
-    const addData = {
+    const swapData = {
+      vault: vault.address,
+
       amount0Max: amount0Max,
       amount1Max: amount1Max,
       amount0Min: 0,
@@ -287,14 +290,14 @@ describe("ArrakisV1Router tests", function () {
       gaugeAddress: stRakisToken
         ? stRakisToken.address
         : ethers.constants.AddressZero,
-    };
 
-    const swapData = {
       amountInSwap: swapAmountIn.toString(),
       amountOutSwap: amountOut,
       zeroForOne: zeroForOne,
       swapRouter: swapParams.to,
       swapPayload: swapParams.data,
+
+      userToRefund: "0x0000000000000000000000000000000000000000",
     };
 
     // flag indicating if "Swapped" event fired
@@ -319,17 +322,26 @@ describe("ArrakisV1Router tests", function () {
     };
 
     // listener for getting data from "Swapped" event
-    vaultRouter.on("Swapped", (zeroForOne, amount0Diff, amount1Diff) => {
-      swapppedEventData.zeroForOne = zeroForOne;
-      swapppedEventData.amount0Diff = ethers.BigNumber.from(amount0Diff);
-      swapppedEventData.amount1Diff = ethers.BigNumber.from(amount1Diff);
-      hasSwapped = true;
-    });
+    vaultRouter.on(
+      "Swapped",
+      (zeroForOne: boolean, amount0Diff: BigNumber, amount1Diff: BigNumber) => {
+        swapppedEventData.zeroForOne = zeroForOne;
+        swapppedEventData.amount0Diff = ethers.BigNumber.from(amount0Diff);
+        swapppedEventData.amount1Diff = ethers.BigNumber.from(amount1Diff);
+        hasSwapped = true;
+      }
+    );
 
     // listener for getting data from "Minted" event
     vault.on(
       "Minted",
-      (receiver, mintAmount, amount0In, amount1In, liquidityMinted) => {
+      (
+        receiver: string,
+        mintAmount: BigNumber,
+        amount0In: BigNumber,
+        amount1In: BigNumber,
+        liquidityMinted: BigNumber
+      ) => {
         mintedEventData.receiver = receiver;
         mintedEventData.mintAmount = ethers.BigNumber.from(mintAmount);
         mintedEventData.amount0In = ethers.BigNumber.from(amount0In);
@@ -352,30 +364,46 @@ describe("ArrakisV1Router tests", function () {
       });
     };
 
-    // call wrapper.swapAndAddLiquidity()
     let swapAndAddTxPending: ContractTransaction;
     if (useETH) {
       if (isToken0Weth) {
+        const value = transactionEthValue || swapData.amount0Max;
+        if (value == swapData.amount0Max) {
+          swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
+            swapData,
+            { value: value }
+          );
+        } else {
+          await expect(
+            vaultRouterWrapper.swapAndAddLiquidity(swapData, { value: value })
+          ).to.be.revertedWith("Invalid amount of ETH forwarded");
+          return;
+        }
+      } else {
+        const value = transactionEthValue || swapData.amount1Max;
+        if (value == swapData.amount1Max) {
+          swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
+            swapData,
+            { value: value }
+          );
+        } else {
+          await expect(
+            vaultRouterWrapper.swapAndAddLiquidity(swapData, { value: value })
+          ).to.be.revertedWith("Invalid amount of ETH forwarded");
+          return;
+        }
+      }
+    } else {
+      if (transactionEthValue) {
         swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
-          vault.address,
-          addData,
           swapData,
-          { value: addData.amount0Max }
+          { value: transactionEthValue }
         );
       } else {
         swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
-          vault.address,
-          addData,
-          swapData,
-          { value: addData.amount1Max }
+          swapData
         );
       }
-    } else {
-      swapAndAddTxPending = await vaultRouterWrapper.swapAndAddLiquidity(
-        vault.address,
-        addData,
-        swapData
-      );
     }
     const swapAndAddTx = await swapAndAddTxPending.wait();
 
@@ -397,13 +425,13 @@ describe("ArrakisV1Router tests", function () {
 
     // calculate actual amounts used for mintAmounts after swap and validate swapAmountOut
     if (swapppedEventData.zeroForOne) {
-      amount0Use = addData.amount0Max.sub(swapppedEventData.amount0Diff);
-      amount1Use = addData.amount1Max.add(swapppedEventData.amount1Diff);
+      amount0Use = swapData.amount0Max.sub(swapppedEventData.amount0Diff);
+      amount1Use = swapData.amount1Max.add(swapppedEventData.amount1Diff);
 
       expect(amountOut).to.be.lt(swapppedEventData.amount1Diff);
     } else {
-      amount0Use = addData.amount0Max.add(swapppedEventData.amount0Diff);
-      amount1Use = addData.amount1Max.sub(swapppedEventData.amount1Diff);
+      amount0Use = swapData.amount0Max.add(swapppedEventData.amount0Diff);
+      amount1Use = swapData.amount1Max.sub(swapppedEventData.amount1Diff);
 
       expect(amountOut).to.be.lt(swapppedEventData.amount0Diff);
     }
@@ -418,39 +446,39 @@ describe("ArrakisV1Router tests", function () {
     // console.log("refund1: ", refund1.toString());
     // console.log("balanceEthAfter: ", balanceEthAfter.toString());
     // console.log("balanceEthBefore: ", balanceEthBefore.toString());
-    // console.log("addData.amount0Max: ", addData.amount0Max.toString());
-    // console.log("addData.amount1Max: ", addData.amount1Max.toString());
+    // console.log("swapData.amount0Max: ", swapData.amount0Max.toString());
+    // console.log("swapData.amount1Max: ", swapData.amount1Max.toString());
     // console.log("ethSpentForGas: ", ethSpentForGas.toString());
 
     // validate balances
     if (!useETH) {
       expect(balance0After).to.equal(
-        balance0Before.sub(addData.amount0Max).add(refund0)
+        balance0Before.sub(swapData.amount0Max).add(refund0)
       );
       expect(balance1After).to.equal(
-        balance1Before.sub(addData.amount1Max).add(refund1)
+        balance1Before.sub(swapData.amount1Max).add(refund1)
       );
       expect(balanceEthAfter).to.equal(balanceEthBefore.sub(ethSpentForGas));
     } else {
       if (isToken0Weth) {
         expect(balance0After).to.equal(balance0Before);
         expect(balance1After).to.equal(
-          balance1Before.sub(addData.amount1Max).add(refund1)
+          balance1Before.sub(swapData.amount1Max).add(refund1)
         );
         expect(balanceEthAfter).to.equal(
           balanceEthBefore
-            .sub(addData.amount0Max)
+            .sub(swapData.amount0Max)
             .sub(ethSpentForGas)
             .add(refund0)
         );
       } else {
         expect(balance0After).to.equal(
-          balance0Before.sub(addData.amount0Max).add(refund0)
+          balance0Before.sub(swapData.amount0Max).add(refund0)
         );
         expect(balance1After).to.equal(balance1Before);
         expect(balanceEthAfter).to.equal(
           balanceEthBefore
-            .sub(addData.amount1Max)
+            .sub(swapData.amount1Max)
             .sub(ethSpentForGas)
             .add(refund1)
         );
@@ -676,6 +704,7 @@ describe("ArrakisV1Router tests", function () {
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
       const addLiquidityData = {
+        vault: vault.address,
         amount0Max: input0,
         amount1Max: input1,
         amount0Min: 0,
@@ -684,7 +713,7 @@ describe("ArrakisV1Router tests", function () {
         useETH: false,
         gaugeAddress: "0x0000000000000000000000000000000000000000",
       };
-      await vaultRouterWrapper.addLiquidity(vault.address, addLiquidityData);
+      await vaultRouterWrapper.addLiquidity(addLiquidityData);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceArrakisV1After = await rakisToken.balanceOf(
@@ -741,6 +770,7 @@ describe("ArrakisV1Router tests", function () {
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
       const addLiquidityData = {
+        vault: vault.address,
         amount0Max: input0,
         amount1Max: input1,
         amount0Min: 0,
@@ -749,7 +779,7 @@ describe("ArrakisV1Router tests", function () {
         useETH: false,
         gaugeAddress: gauge.address,
       };
-      await vaultRouterWrapper.addLiquidity(vault.address, addLiquidityData);
+      await vaultRouterWrapper.addLiquidity(addLiquidityData);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceStakedAfter = await stRakisToken.balanceOf(
@@ -804,6 +834,7 @@ describe("ArrakisV1Router tests", function () {
         ethers.utils.parseEther("100000000")
       );
       const removeLiquidity = {
+        vault: vault.address,
         burnAmount: balanceArrakisV1Before,
         amount0Min: 0,
         amount1Min: 0,
@@ -811,7 +842,7 @@ describe("ArrakisV1Router tests", function () {
         receiveETH: false,
         gaugeAddress: "0x0000000000000000000000000000000000000000",
       };
-      await vaultRouterWrapper.removeLiquidity(vault.address, removeLiquidity);
+      await vaultRouterWrapper.removeLiquidity(removeLiquidity);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceArrakisV1After = await rakisToken.balanceOf(
@@ -834,6 +865,7 @@ describe("ArrakisV1Router tests", function () {
         ethers.utils.parseEther("100000000")
       );
       const removeLiquidity = {
+        vault: vault.address,
         burnAmount: balanceStakedBefore,
         amount0Min: 0,
         amount1Min: 0,
@@ -841,7 +873,7 @@ describe("ArrakisV1Router tests", function () {
         receiveETH: false,
         gaugeAddress: gauge.address,
       };
-      await vaultRouterWrapper.removeLiquidity(vault.address, removeLiquidity);
+      await vaultRouterWrapper.removeLiquidity(removeLiquidity);
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceStakedAfter = await stRakisToken.balanceOf(
@@ -892,6 +924,7 @@ describe("ArrakisV1Router tests", function () {
       const input0 = "100000000";
       const input1 = WAD.mul(ethers.BigNumber.from("2"));
       const addLiquidityData = {
+        vault: arrakisWethVault.address,
         amount0Max: input0,
         amount1Max: input1,
         amount0Min: 0,
@@ -900,11 +933,9 @@ describe("ArrakisV1Router tests", function () {
         useETH: true,
         gaugeAddress: "0x0000000000000000000000000000000000000000",
       };
-      await vaultRouterWrapper.addLiquidity(
-        arrakisWethVault.address,
-        addLiquidityData,
-        { value: input1 }
-      );
+      await vaultRouterWrapper.addLiquidity(addLiquidityData, {
+        value: input1,
+      });
 
       let balance0After = await token0W.balanceOf(await wallet.getAddress());
       let balance1After = await wallet.provider?.getBalance(
@@ -941,6 +972,7 @@ describe("ArrakisV1Router tests", function () {
         balanceArrakisV1Before
       );
       const removeLiquidity = {
+        vault: arrakisWethVault.address,
         burnAmount: balanceArrakisV1Before,
         amount0Min: 0,
         amount1Min: 0,
@@ -948,10 +980,7 @@ describe("ArrakisV1Router tests", function () {
         receiveETH: true,
         gaugeAddress: "0x0000000000000000000000000000000000000000",
       };
-      await vaultRouterWrapper.removeLiquidity(
-        arrakisWethVault.address,
-        removeLiquidity
-      );
+      await vaultRouterWrapper.removeLiquidity(removeLiquidity);
       balance0After = await token0.balanceOf(await wallet.getAddress());
       balance1After = await wallet.provider?.getBalance(
         await wallet.getAddress()
@@ -1053,6 +1082,7 @@ describe("ArrakisV1Router tests", function () {
       const input0 = "100000000";
       const input1 = WAD.mul(ethers.BigNumber.from("2"));
       const addLiquidityData = {
+        vault: arrakisWethVault.address,
         amount0Max: input0,
         amount1Max: input1,
         amount0Min: 0,
@@ -1061,11 +1091,9 @@ describe("ArrakisV1Router tests", function () {
         useETH: true,
         gaugeAddress: gauge.address,
       };
-      await vaultRouterWrapper.addLiquidity(
-        arrakisWethVault.address,
-        addLiquidityData,
-        { value: input1 }
-      );
+      await vaultRouterWrapper.addLiquidity(addLiquidityData, {
+        value: input1,
+      });
 
       let balance0After = await token0W.balanceOf(await wallet.getAddress());
       let balance1After = await wallet.provider?.getBalance(
@@ -1123,6 +1151,7 @@ describe("ArrakisV1Router tests", function () {
         balanceStakedBefore
       );
       const removeLiquidity = {
+        vault: arrakisWethVault.address,
         burnAmount: balanceStakedBefore,
         amount0Min: 0,
         amount1Min: 0,
@@ -1130,10 +1159,7 @@ describe("ArrakisV1Router tests", function () {
         receiveETH: true,
         gaugeAddress: gauge.address,
       };
-      await vaultRouterWrapper.removeLiquidity(
-        arrakisWethVault.address,
-        removeLiquidity
-      );
+      await vaultRouterWrapper.removeLiquidity(removeLiquidity);
       balance0After = await token0W.balanceOf(await wallet.getAddress());
       balance1After = await wallet.provider?.getBalance(
         await wallet.getAddress()
@@ -1167,6 +1193,178 @@ describe("ArrakisV1Router tests", function () {
       expect(contractBalance2).to.equal(ethers.constants.Zero);
       expect(contractBalance3).to.equal(ethers.constants.Zero);
       expect(routerBalanceEth).to.equal(routerBalanceEthEnd);
+    });
+    it("tests adding liquidity using native ETH passing empty msg.value", async function () {
+      const arrakisWethVault = (await ethers.getContractAt(
+        "IArrakisVaultV1",
+        addresses.ArrakisV1UsdcWethPool
+      )) as IArrakisVaultV1;
+      const token0W = (await ethers.getContractAt(
+        "IERC20",
+        await arrakisWethVault.token0()
+      )) as IERC20;
+
+      expect(await arrakisWethVault.token1()).to.equal(addresses.WETH);
+
+      await token0W
+        .connect(wallet)
+        .approve(
+          vaultRouterWrapper.address,
+          ethers.utils.parseEther("1000000")
+        );
+
+      const input0 = "100000000";
+      const input1 = WAD.mul(ethers.BigNumber.from("2"));
+      const transactionEthValue = ethers.BigNumber.from("0");
+
+      const addLiquidityData = {
+        vault: arrakisWethVault.address,
+        amount0Max: input0,
+        amount1Max: input1,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        useETH: true,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
+
+      await expect(
+        vaultRouterWrapper.addLiquidity(addLiquidityData, {
+          value: transactionEthValue,
+        })
+      ).to.be.revertedWith("Not enough ETH forwarded");
+    });
+    it("tests adding liquidity using native ETH passing double msg.value", async function () {
+      const arrakisWethVault = (await ethers.getContractAt(
+        "IArrakisVaultV1",
+        addresses.ArrakisV1UsdcWethPool
+      )) as IArrakisVaultV1;
+      const token0W = (await ethers.getContractAt(
+        "IERC20",
+        await arrakisWethVault.token0()
+      )) as IERC20;
+      const token1W = (await ethers.getContractAt(
+        "IERC20",
+        await arrakisWethVault.token1()
+      )) as IERC20;
+      const rakisTokenW = (await ethers.getContractAt(
+        "IERC20",
+        addresses.ArrakisV1UsdcWethPool
+      )) as IERC20;
+
+      expect(await arrakisWethVault.token1()).to.equal(addresses.WETH);
+
+      await token0W
+        .connect(wallet)
+        .approve(
+          vaultRouterWrapper.address,
+          ethers.utils.parseEther("1000000")
+        );
+      let balance0Before = await token0W.balanceOf(await wallet.getAddress());
+      let balance1Before = await wallet.provider?.getBalance(
+        await wallet.getAddress()
+      );
+      let balanceArrakisV1Before = await rakisTokenW.balanceOf(
+        await wallet.getAddress()
+      );
+      let wrapperEthBalanceBefore = await wallet.provider?.getBalance(
+        vaultRouterWrapper.address
+      );
+
+      const input0 = "100000000";
+      const input1 = WAD.mul(ethers.BigNumber.from("2"));
+      const transactionEthValue = input1.mul(2);
+      const addLiquidityData = {
+        vault: arrakisWethVault.address,
+        amount0Max: input0,
+        amount1Max: input1,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        useETH: true,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
+      await vaultRouterWrapper.addLiquidity(addLiquidityData, {
+        value: transactionEthValue,
+      });
+
+      let balance0After = await token0W.balanceOf(await wallet.getAddress());
+      let balance1After = await wallet.provider?.getBalance(
+        await wallet.getAddress()
+      );
+      let balanceArrakisV1After = await rakisTokenW.balanceOf(
+        await wallet.getAddress()
+      );
+      let wrapperEthBalanceAfter = await wallet.provider?.getBalance(
+        vaultRouterWrapper.address
+      );
+
+      expect(balance0Before).to.be.gt(balance0After);
+      expect(balance1Before).to.be.gt(balance1After);
+      expect(balanceArrakisV1Before).to.be.lt(balanceArrakisV1After);
+      expect(wrapperEthBalanceBefore).to.be.eq(wrapperEthBalanceAfter);
+
+      let contractBalance0 = await token0W.balanceOf(vaultRouter.address);
+      let contractBalance1 = await token1W.balanceOf(vaultRouter.address);
+      let contractBalanceG = await rakisTokenW.balanceOf(vaultRouter.address);
+      let routerBalanceEthEnd = await wallet.provider?.getBalance(
+        vaultRouter.address
+      );
+
+      expect(contractBalance0).to.equal(ethers.constants.Zero);
+      expect(contractBalance1).to.equal(ethers.constants.Zero);
+      expect(contractBalanceG).to.equal(ethers.constants.Zero);
+      expect(routerBalanceEth).to.equal(routerBalanceEthEnd);
+
+      balance0Before = balance0After;
+      balance1Before = balance1After;
+      balanceArrakisV1Before = balanceArrakisV1After;
+      wrapperEthBalanceBefore = wrapperEthBalanceAfter;
+
+      // removeLiquidityETH
+
+      await rakisTokenW.approve(
+        vaultRouterWrapper.address,
+        balanceArrakisV1Before
+      );
+      const removeLiquidity = {
+        vault: arrakisWethVault.address,
+        burnAmount: balanceArrakisV1Before,
+        amount0Min: 0,
+        amount1Min: 0,
+        receiver: await wallet.getAddress(),
+        receiveETH: true,
+        gaugeAddress: "0x0000000000000000000000000000000000000000",
+      };
+      await vaultRouterWrapper.removeLiquidity(removeLiquidity);
+      balance0After = await token0.balanceOf(await wallet.getAddress());
+      balance1After = await wallet.provider?.getBalance(
+        await wallet.getAddress()
+      );
+      balanceArrakisV1After = await rakisTokenW.balanceOf(
+        await wallet.getAddress()
+      );
+
+      expect(balance0After).to.be.gt(balance0Before);
+      expect(balance1After).to.be.gt(balance1Before);
+      expect(balanceArrakisV1Before).to.be.gt(balanceArrakisV1After);
+      expect(balanceArrakisV1After).to.equal(ethers.constants.Zero);
+
+      contractBalance0 = await token0W.balanceOf(vaultRouter.address);
+      contractBalance1 = await token1W.balanceOf(vaultRouter.address);
+      contractBalanceG = await rakisTokenW.balanceOf(vaultRouter.address);
+      routerBalanceEthEnd = await wallet.provider?.getBalance(
+        vaultRouter.address
+      );
+      wrapperEthBalanceAfter = await wallet.provider?.getBalance(
+        vaultRouterWrapper.address
+      );
+
+      expect(contractBalance0).to.equal(ethers.constants.Zero);
+      expect(contractBalance1).to.equal(ethers.constants.Zero);
+      expect(contractBalanceG).to.equal(ethers.constants.Zero);
+      expect(routerBalanceEth).to.equal(routerBalanceEthEnd);
+      expect(wrapperEthBalanceBefore).to.equal(wrapperEthBalanceAfter);
     });
   });
   describe("Swap and add liquidity tests", function () {
@@ -1449,6 +1647,23 @@ describe("ArrakisV1Router tests", function () {
           true,
           "scenario2",
           stRakisTokenW
+        );
+        console.log(
+          ">>>> same test with native ETH and a different msg.value..."
+        );
+        await swapAndAddTest(
+          arrakisWethVault,
+          token0W,
+          token1W,
+          rakisTokenW,
+          ethers.BigNumber.from("10000"),
+          ethers.BigNumber.from("0"),
+          true,
+          5,
+          true,
+          "scenario2",
+          stRakisTokenW,
+          ethers.BigNumber.from("100000")
         );
       }
     });
