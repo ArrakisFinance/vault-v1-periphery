@@ -18,7 +18,7 @@ While doing this separation, some refactoring/optimizations were done on the fun
 
 - `addLiquidity` and `removeLiquidity` functions now can stake/unstake to a gauge (deprecating `addLiquidityAndStake` and `removeLiquidityAndStake`).
   -- When `gaugeAddress` is 0 => don't stake (or unstake)
-  -- When `gaugeAddress` is passed, we get the gauge on that address and retrieve its `staking_token()` to compare with the `IArrakisVaultV1 pool` address
+  -- When `gaugeAddress` is passed, we get the gauge on that address and retrieve its `staking_token()` to compare with the `IArrakisVaultV1 vault` address
 
 - `rebalanceAnd` functions of GUniV1Router were also updated the same way as mentioned above and renamed to `swapAndAddLiquidity`.
 
@@ -28,6 +28,8 @@ While doing this separation, some refactoring/optimizations were done on the fun
 
 ```
 struct AddLiquidityData {
+    // address of ArrakisV1 vault
+    IArrakisVaultV1 vault;
     // maximum amount of token0 to forward on mint
     uint256 amount0Max;
     // maximum amount of token1 to forward on mint
@@ -49,12 +51,18 @@ struct AddLiquidityData {
 
 ```
 struct MintData {
+    // address of ArrakisV1 vault
+    IArrakisVaultV1 vault;
     // amount of token0 to deposit
     uint256 amount0In;
     // amount of token1 to deposit
     uint256 amount1In;
     // amount of LP tokens to mint
     uint256 mintAmount;
+    // account to receive minted tokens
+    address receiver;
+    // address of gauge to stake tokens in
+    address gaugeAddress;
 }
 ```
 
@@ -62,6 +70,8 @@ struct MintData {
 
 ```
 struct RemoveLiquidityData {
+    // address of ArrakisV1 vault
+    IArrakisVaultV1 vault;
     // amount of LP tokens to burn
     uint256 burnAmount;
     // minimum amount of token0 to receive
@@ -80,7 +90,23 @@ struct RemoveLiquidityData {
 - SwapData is used by `swapAndAddLiquidity` function
 
 ```
-struct SwapData {
+struct AddAndSwapData {
+    // address of ArrakisV1 vault
+    IArrakisVaultV1 vault;
+    // maximum amount of token0 to forward on mint
+    uint256 amount0Max;
+    // maximum amount of token1 to forward on mint
+    uint256 amount1Max;
+    // the minimum amount of token0 actually deposited (slippage protection)
+    uint256 amount0Min;
+    // the minimum amount of token1 actually deposited (slippage protection)
+    uint256 amount1Min;
+    // account to receive minted tokens
+    address receiver;
+    // bool indicating to use native ETH
+    bool useETH;
+    // address of gauge to stake tokens in
+    address gaugeAddress;
     // max amount being swapped
     uint256 amountInSwap;
     // min amount received on swap
@@ -90,7 +116,9 @@ struct SwapData {
     // address for swap calls
     address swapRouter;
     // payload for swap call
-    bytes[] swapPayload;
+    bytes swapPayload;
+    // address of the user to be refunded
+    address payable userToRefund;
 }
 ```
 
@@ -100,7 +128,6 @@ struct SwapData {
 
 ```
 function addLiquidity(
-    IArrakisVaultV1 pool,
     AddLiquidityData memory _addData
 )
     external
@@ -113,13 +140,12 @@ function addLiquidity(
 ```
 
 - if AddLiquidityData.useETH is true, this function will wrap ETH into WETH and send non-used ether back to the user.
-- if AddLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the pool address.
+- if AddLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the vault address.
 
 ## removeLiquidity
 
 ```
 function removeLiquidity(
-    IArrakisVaultV1 pool,
     RemoveLiquidityData memory _removeData
 )
     external
@@ -130,15 +156,13 @@ function removeLiquidity(
     );
 ```
 
-- if RemoveLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the pool address, claim rewards for the user and unstake.
+- if RemoveLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the vault address, claim rewards for the user and unstake.
 
 ## swapAndAddLiquidity
 
 ```
 function swapAndAddLiquidity(
-    IArrakisVaultV1 pool,
-    AddLiquidityData memory _addData,
-    SwapData memory _swapData
+    AddAndSwapData memory _swapData
 )
     external
     payable
@@ -151,9 +175,9 @@ function swapAndAddLiquidity(
     );
 ```
 
-- if AddLiquidityData.useETH is true, this function will wrap ETH into WETH and send non-used ether back to the user.
-- if AddLiquidityData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the pool address.
-- if the user is depositing 2 tokens and doing a swap => if token0 is being swapped for token1, AddLiquidityData.amount0Max should be the amount of token0 being deposited "normally" plus the amount to be swapped (SwapData.amountInSwap). (same applies for amount1Max on the inverse swap scenario)
+- if AddAndSwapData.useETH is true, this function will wrap ETH into WETH and send non-used ether back to the user.
+- if AddAndSwapData.gaugeAddress is filled, this function will validate if the gauge's `staking_token()` matches the vault address.
+- if the user is depositing 2 tokens and doing a swap => if token0 is being swapped for token1, AddAndSwapData.amount0Max should be the amount of token0 being deposited "normally" plus the amount to be swapped (AddAndSwapData.amountInSwap). (same applies for amount1Max on the inverse swap scenario)
 
 ### ArrakisV1Router
 
@@ -163,8 +187,6 @@ function swapAndAddLiquidity(
 
 ```
 function addLiquidity(
-    IArrakisVaultV1 pool,
-    AddLiquidityData memory _addData,
     MintData memory _mintData
 )
     external
@@ -176,13 +198,12 @@ function addLiquidity(
     )
 ```
 
-- if AddLiquidityData.gaugeAddress is filled, this function will stake the LP tokens in the gauge after depositing to the vault.
+- if \_mintData.gaugeAddress is filled, this function will stake the LP tokens in the gauge after depositing to the vault.
 
 ## removeLiquidity
 
 ```
 function removeLiquidity(
-    IArrakisVaultV1 pool,
     RemoveLiquidityData memory _removeData
 )
     external
@@ -199,10 +220,7 @@ function removeLiquidity(
 
 ```
 function swapAndAddLiquidity(
-    IArrakisVaultV1 pool,
-    AddLiquidityData memory _addData,
-    SwapData memory _swapData,
-    address payable userToRefund
+    AddAndSwapData memory _swapData,
 )
     external
     payable
@@ -215,13 +233,11 @@ function swapAndAddLiquidity(
     )
 ```
 
-- if AddLiquidityData.gaugeAddress is filled, this function will stake LP tokens in the gauge after deposit.
-- if AddLiquidityData.useETH is true, this function will send unused ETH back to the user.
+- if AddAndSwapData.gaugeAddress is filled, this function will stake LP tokens in the gauge after deposit.
+- if AddAndSwapData.useETH is true, this function will send unused ETH back to the user.
 
 ### Updates for additional security on swaps:
 
 - on `ArrakisV1Router.swapAndAddLiquidity` only 1 swap action is allowed. The router will increase the allowance of the `swapRouter` for the amount being swapped.
-
-- Implement router whitelist, so swaps are only allowed for whitelisted `_swapActions` addresses. This whitelist should be the same for all vaults, in a contract controlled by Arrakis core multisig. The whitelist's address is defined on ArrakisV1RouterWrapper to validate the address of any incoming swap.
 
 - Validate amount post-swap. Added parameter `_amountOutSwap` to `swapAndAddLiquidity` for validating the amount received after a swap. This parameter should consider price impact/slippage when being passed and the transaction should revert if balance difference pre/post swap is less than `_amountOutSwap`.
