@@ -149,9 +149,9 @@ contract ArrakisV1RouterWrapper is
         (amount0, amount1, mintAmount) = router.addLiquidity(_mintData);
 
         if (_addData.useETH) {
-            if (isToken0Weth && _addData.amount0Max > amount0) {
+            if (isToken0Weth && msg.value > amount0) {
                 payable(msg.sender).sendValue(msg.value - amount0);
-            } else if (!isToken0Weth && _addData.amount1Max > amount1) {
+            } else if (!isToken0Weth && msg.value > amount1) {
                 payable(msg.sender).sendValue(msg.value - amount1);
             }
         }
