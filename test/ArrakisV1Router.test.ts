@@ -5,15 +5,10 @@ import { ERC20 } from "../typechain/ERC20";
 import { ArrakisV1Router } from "../typechain/ArrakisV1Router";
 import { ArrakisV1RouterWrapper } from "../typechain/ArrakisV1RouterWrapper";
 import { IUniswapV3Pool } from "../typechain/IUniswapV3Pool";
-import { ArrakisV1Resolver } from "../typechain/ArrakisV1Resolver";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import { Addresses, getAddresses } from "../src/addresses";
-import {
-  swapTokenData,
-  quote1Inch,
-  mockPayloads,
-  OneInchDataType,
-} from "../src/oneInchApiIntegration";
+import { mockPayloads, OneInchDataType } from "../src/oneInchApiIntegration";
+import { getSwapAmount } from "../src/swapAmountApiIntegration";
 import Gauge from "../src/LiquidityGaugeV4.json";
 import { BigNumber, Contract, ContractTransaction } from "ethers";
 
@@ -38,7 +33,6 @@ describe("ArrakisV1Router tests", function () {
   let vault: IArrakisVaultV1;
   let vaultRouterWrapper: ArrakisV1RouterWrapper;
   let vaultRouter: ArrakisV1Router;
-  let resolver: ArrakisV1Resolver;
   let gauge: Contract;
   let routerBalanceEth: BigNumber | undefined;
 
@@ -146,105 +140,27 @@ describe("ArrakisV1Router tests", function () {
         );
       }
     } else {
-      // get quote and swap data from live 1inch API
-
-      // amount here is not so important, as what we want is an initial price for this asset pair
-      const quoteAmount = await quote1Inch(
-        "1",
-        zeroForOne ? token0.address : token1.address,
-        zeroForOne ? token1.address : token0.address,
-        zeroForOne ? amount0Max.toString() : amount1Max.toString()
-      );
-      // console.log("quoteAmount: ", quoteAmount);
-
-      const numerator = ethers.BigNumber.from(quoteAmount).mul(
-        zeroForOne
-          ? ethers.BigNumber.from((10 ** decimalsToken0).toString())
-          : ethers.BigNumber.from((10 ** decimalsToken1).toString())
-      );
-      const denominator = zeroForOne
-        ? amount0Max.mul(
-            ethers.BigNumber.from((10 ** decimalsToken1).toString())
-          )
-        : amount1Max.mul(
-            ethers.BigNumber.from((10 ** decimalsToken0).toString())
-          );
-      const priceX18 = numerator
-        .mul(ethers.utils.parseEther("1"))
-        .div(denominator);
-      // console.log("price check:", priceX18.toString());
-
-      // given this price and the amounts the user is willing to spend
-      // which token should be swapped and how much
-      const result = await resolver.getRebalanceParams(
+      // get quote and swap data from swap amount api
+      const networkId =
+        network.name === "hardhat"
+          ? "1"
+          : network.config.chainId
+          ? network.config.chainId.toString()
+          : "1";
+      const swapAmountData = await getSwapAmount(
+        amount0Max.toString(),
+        amount1Max.toString(),
         vault.address,
-        amount0Max,
-        amount1Max,
-        priceX18
+        networkId,
+        vaultRouter.address
       );
-      // console.log(
-      //   "getRebalanceParams - result.swapAmount.toString(): ",
-      //   result.swapAmount.toString()
-      // );
-      expect(result.zeroForOne).to.be.equals(zeroForOne);
-
-      // now that we know how much to swap, let's get a new quote
-      const quoteAmount2 = await quote1Inch(
-        "1",
-        zeroForOne ? token0.address : token1.address,
-        zeroForOne ? token1.address : token0.address,
-        result.swapAmount.toString()
-      );
-      // console.log("quoteAmount2:", quoteAmount2);
-
-      const numerator2 = ethers.BigNumber.from(quoteAmount2).mul(
-        zeroForOne
-          ? ethers.BigNumber.from((10 ** decimalsToken0).toString())
-          : ethers.BigNumber.from((10 ** decimalsToken1).toString())
-      );
-      const denominator2 = result.swapAmount.mul(
-        zeroForOne
-          ? ethers.BigNumber.from((10 ** decimalsToken1).toString())
-          : ethers.BigNumber.from((10 ** decimalsToken0).toString())
-      );
-      const price2 = numerator2
-        .mul(ethers.utils.parseEther("1"))
-        .div(denominator2);
-      // console.log("price2 check:", price2.toString());
-
-      // given the new price, let's get a new swap amount
-      const result2 = await resolver.getRebalanceParams(
-        vault.address,
-        amount0Max,
-        amount1Max,
-        price2
-      );
-      // console.log(
-      //   "getRebalanceParams - result2.swapAmount.toString():",
-      //   result2.swapAmount.toString()
-      // );
-      expect(result2.zeroForOne).to.be.equals(zeroForOne);
-
-      // given this new swapAmount, how much of the other token will I receive?
-      const quoteAmount3 = await quote1Inch(
-        "1",
-        zeroForOne ? token0.address : token1.address,
-        zeroForOne ? token1.address : token0.address,
-        result2.swapAmount.toString()
-      );
-      // console.log("quoteAmount3:", quoteAmount3);
-
-      swapAmountIn = result2.swapAmount;
-      swapAmountOut = ethers.BigNumber.from(quoteAmount3);
-
-      swapParams = await swapTokenData(
-        "1",
-        zeroForOne ? token0.address : token1.address,
-        zeroForOne ? token1.address : token0.address,
-        swapAmountIn.toString(),
-        vaultRouter.address,
-        slippage.toString()
-      );
+      console.log("swapAmountData: ", swapAmountData);
+      swapAmountIn = ethers.BigNumber.from(swapAmountData.swap.amountIn);
+      swapAmountOut = ethers.BigNumber.from(swapAmountData.swap.amountOut);
+      swapParams = {
+        to: swapAmountData.swap.to,
+        data: swapAmountData.swap.data,
+      };
     }
 
     // now that we have swapData, calculate amounts used for getMintAmounts()
@@ -292,14 +208,14 @@ describe("ArrakisV1Router tests", function () {
         : ethers.constants.AddressZero,
 
       amountInSwap: swapAmountIn.toString(),
-      amountOutSwap: amountOut,
+      amountOutSwap: amountOut.toString(),
       zeroForOne: zeroForOne,
       swapRouter: swapParams.to,
       swapPayload: swapParams.data,
 
-      userToRefund: "0x0000000000000000000000000000000000000000",
+      userToRefund: walletAddress,
     };
-
+    console.log("SwapData: ", swapData);
     // flag indicating if "Swapped" event fired
     let hasSwapped = false;
     // flag indicating if "Minted" event fired
@@ -619,13 +535,6 @@ describe("ArrakisV1Router tests", function () {
     )) as ArrakisV1RouterWrapper;
 
     await vaultRouterWrapper.updateRouter(vaultRouter.address);
-
-    const resolverAddress = (await deployments.get("ArrakisV1Resolver"))
-      .address;
-    resolver = (await ethers.getContractAt(
-      "ArrakisV1Resolver",
-      resolverAddress
-    )) as ArrakisV1Resolver;
 
     await network.provider.request({
       method: "hardhat_impersonateAccount",
