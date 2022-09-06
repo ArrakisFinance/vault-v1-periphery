@@ -67,6 +67,17 @@ export const getAddresses = (network: string): Addresses => {
         ArrakisDevMultiSig: "0xAa2E0c5c85ACb7717e58060AB3c96d2B184EE07C",
         ArrakisV1WethPool: "",
       };
+    case "arbitrum":
+      return {
+        UniswapV3Factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        ArrakisV1Router: "0x336649aEb266f3182d63f4FAD7B3cF0dBa15f4c8",
+        ArrakisV1Resolver: "0xe03311D30bdeb60511BAe8de135C6524B9576B2e",
+        ArrakisV1Factory: "0xd68b055fb444D136e3aC4df023f4C42334F06395",
+        BlacklistedRouter: "",
+        WETH: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+        ArrakisDevMultiSig: "0x77BADa8FC2A478f1bc1E1E4980916666187D0dF7",
+        ArrakisV1WethPool: "",
+      };
     default:
       throw new Error(`No addresses for Network: ${network}`);
   }

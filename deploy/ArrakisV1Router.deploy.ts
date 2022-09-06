@@ -7,7 +7,8 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   if (
     hre.network.name === "mainnet" ||
     hre.network.name === "optimism" ||
-    hre.network.name === "polygon"
+    hre.network.name === "polygon" ||
+    hre.network.name === "arbitrum"
   ) {
     console.log(
       `!! Deploying ArrakisV1Router to ${hre.network.name}. Hit ctrl + c to abort`
@@ -40,6 +41,7 @@ func.skip = async (hre: HardhatRuntimeEnvironment) => {
     hre.network.name === "mainnet" ||
     hre.network.name === "polygon" ||
     hre.network.name === "optimism" ||
+    hre.network.name === "arbitrum" ||
     hre.network.name === "goerli";
   return shouldSkip ? true : false;
 };
