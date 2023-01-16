@@ -67,6 +67,7 @@ contract ArrakisV1RouterStaking is
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
+        uint256 amountSharesMin,
         address receiver
     )
         external
@@ -85,6 +86,7 @@ contract ArrakisV1RouterStaking is
                 amount1Max,
                 amount0Min,
                 amount1Min,
+                amountSharesMin,
                 receiver
             );
     }
@@ -98,6 +100,7 @@ contract ArrakisV1RouterStaking is
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
+        uint256 amountSharesMin,
         address receiver
     )
         external
@@ -116,6 +119,7 @@ contract ArrakisV1RouterStaking is
             amount1Max,
             amount0Min,
             amount1Min,
+            amountSharesMin,
             address(this)
         );
 
@@ -130,6 +134,7 @@ contract ArrakisV1RouterStaking is
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
+        uint256 amountSharesMin,
         address receiver
     )
         external
@@ -149,6 +154,7 @@ contract ArrakisV1RouterStaking is
                 amount1Max,
                 amount0Min,
                 amount1Min,
+                amountSharesMin,
                 receiver
             );
     }
@@ -162,6 +168,7 @@ contract ArrakisV1RouterStaking is
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
+        uint256 amountSharesMin,
         address receiver
     )
         external
@@ -181,6 +188,7 @@ contract ArrakisV1RouterStaking is
             amount1Max,
             amount0Min,
             amount1Min,
+            amountSharesMin,
             address(this)
         );
 
@@ -385,6 +393,7 @@ contract ArrakisV1RouterStaking is
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
+        uint256 amountSharesMin,
         address receiver
     )
         internal
@@ -400,7 +409,9 @@ contract ArrakisV1RouterStaking is
         (uint256 amount0In, uint256 amount1In, uint256 _mintAmount) =
             pool.getMintAmounts(amount0Max, amount1Max);
         require(
-            amount0In >= amount0Min && amount1In >= amount1Min,
+            amount0In >= amount0Min &&
+                amount1In >= amount1Min &&
+                _mintAmount >= amountSharesMin,
             "below min amounts"
         );
 
@@ -421,6 +432,7 @@ contract ArrakisV1RouterStaking is
         uint256 amount1Max,
         uint256 amount0Min,
         uint256 amount1Min,
+        uint256 amountSharesMin,
         address receiver
     )
         internal
@@ -436,7 +448,9 @@ contract ArrakisV1RouterStaking is
         (uint256 amount0In, uint256 amount1In, uint256 _mintAmount) =
             pool.getMintAmounts(amount0Max, amount1Max);
         require(
-            amount0In >= amount0Min && amount1In >= amount1Min,
+            amount0In >= amount0Min &&
+                amount1In >= amount1Min &&
+                _mintAmount >= amountSharesMin,
             "below min amounts"
         );
 
