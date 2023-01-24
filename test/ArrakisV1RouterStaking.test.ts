@@ -104,7 +104,7 @@ describe("ArrakisV1 Staking Router tests", function () {
     )) as IERC20;
 
     contractBalanceEth = await wallet.provider?.getBalance(vaultRouter.address);
-    expect(contractBalanceEth).to.equal(1);
+    expect(contractBalanceEth).to.equal(0);
   });
 
   describe("deposits through ArrakisV1RouterStaking", function () {
