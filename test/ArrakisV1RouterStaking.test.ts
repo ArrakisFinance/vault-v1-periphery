@@ -104,7 +104,7 @@ describe("ArrakisV1 Staking Router tests", function () {
     )) as IERC20;
 
     contractBalanceEth = await wallet.provider?.getBalance(vaultRouter.address);
-    expect(contractBalanceEth).to.equal(1);
+    expect(contractBalanceEth).to.equal(0);
   });
 
   describe("deposits through ArrakisV1RouterStaking", function () {
@@ -124,12 +124,27 @@ describe("ArrakisV1 Staking Router tests", function () {
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
 
+      const { mintAmount } = await vault.getMintAmounts(input0, input1);
+
+      await expect(
+        vaultRouter.addLiquidity(
+          vault.address,
+          input0,
+          input1,
+          0,
+          0,
+          mintAmount.add(ethers.BigNumber.from("1")),
+          await wallet.getAddress()
+        )
+      ).to.be.revertedWith("below min amounts");
+
       await vaultRouter.addLiquidity(
         vault.address,
         input0,
         input1,
         0,
         0,
+        mintAmount.sub(ethers.BigNumber.from("1")),
         await wallet.getAddress()
       );
       const balance0After = await token0.balanceOf(await wallet.getAddress());
@@ -185,14 +200,30 @@ describe("ArrakisV1 Staking Router tests", function () {
       const input0 = WAD.mul(ethers.BigNumber.from("100"));
       const input1 = "100000000";
 
+      const { mintAmount } = await vault.getMintAmounts(input0, input1);
+
+      await expect(
+        vaultRouter.addLiquidityAndStake(
+          gauge.address,
+          input0,
+          input1,
+          0,
+          0,
+          mintAmount.add(ethers.BigNumber.from("1")),
+          await wallet.getAddress()
+        )
+      ).to.be.revertedWith("below min amounts");
+
       await vaultRouter.addLiquidityAndStake(
         gauge.address,
         input0,
         input1,
         0,
         0,
+        mintAmount,
         await wallet.getAddress()
       );
+
       const balance0After = await token0.balanceOf(await wallet.getAddress());
       const balance1After = await token1.balanceOf(await wallet.getAddress());
       const balanceStakedAfter = await stRakisToken.balanceOf(
@@ -334,6 +365,7 @@ describe("ArrakisV1 Staking Router tests", function () {
         arrakisWethVault.address,
         input0,
         input1,
+        0,
         0,
         0,
         await wallet.getAddress(),
@@ -482,6 +514,7 @@ describe("ArrakisV1 Staking Router tests", function () {
         stRakisToken.address,
         input0,
         input1,
+        0,
         0,
         0,
         await wallet.getAddress(),
