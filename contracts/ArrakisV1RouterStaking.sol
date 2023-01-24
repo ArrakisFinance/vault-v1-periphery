@@ -57,6 +57,7 @@ contract ArrakisV1RouterStaking is
     /// @param amount1Max the maximum amount of token1 msg.sender willing to input
     /// @param amount0Min the minimum amount of token0 actually input (slippage protection)
     /// @param amount1Min the minimum amount of token1 actually input (slippage protection)
+    /// @param amountSharesMin the minimum amount of shares minted (slippage protection)
     /// @param receiver account to receive minted ArrakisVaultV1 tokens
     /// @return amount0 amount of token0 transferred from msg.sender to mint `mintAmount`
     /// @return amount1 amount of token1 transferred from msg.sender to mint `mintAmount`
