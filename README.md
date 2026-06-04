@@ -1,3 +1,14 @@
+# ⚠️ DEPRECATED
+
+**This repository is no longer maintained.** The Arrakis V1 vault contracts
+remain deployed and immutable on-chain, but this codebase is frozen and will
+receive no further updates, fixes, or security patches.
+
+For current Arrakis liquidity-management contracts, see
+**[arrakis-modular](https://github.com/ArrakisFinance/arrakis-modular)**.
+
+---
+
 # Arrakis Vault V1 Periphery
 
 Consists cheifly of the `ArrakisV1RouterStaking` contract for interacting with ArrakisV1 vaults.
